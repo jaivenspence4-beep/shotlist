@@ -117,6 +117,7 @@ import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.scan.ScanScreen
+import app.shotlist.ui.share.ShareCardGenerator
 import app.shotlist.ui.theme.OrbStyle
 import app.shotlist.ui.theme.ShotlistPalette
 import app.shotlist.ui.theme.ShotlistTheme
@@ -420,7 +421,19 @@ private fun AppShellContent(
                         },
                         onShareWrapped = {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            context.startActivity(weeklyShareIntent(dailyStreak, weeklyStats))
+                            context.startActivity(
+                                ShareCardGenerator.weeklyIntent(
+                                    context = context,
+                                    found = weeklyStats.found,
+                                    acted = weeklyStats.acted,
+                                    streak = dailyStreak,
+                                    topType = weeklyStats.topType,
+                                ),
+                            )
+                        },
+                        onShare = { action ->
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            context.startActivity(ShareCardGenerator.findingIntent(context, action))
                         },
                         onAccept = { action ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -606,6 +619,7 @@ private fun InboxScreen(
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
     onShareWrapped: () -> Unit,
+    onShare: (ShotlistAction) -> Unit,
     onAccept: (ShotlistAction) -> Unit,
     onVault: (ShotlistAction) -> Unit,
     onSnooze: (ShotlistAction) -> Unit,
@@ -672,6 +686,7 @@ private fun InboxScreen(
                     hazeState = hazeState,
                     onAccept = { onAccept(action) },
                     onVault = { onVault(action) },
+                    onShare = { onShare(action) },
                     onSnooze = { onSnooze(action) },
                     onDismiss = { onDismiss(action) },
                 )
@@ -765,16 +780,6 @@ private fun updateDailyStreak(prefs: android.content.SharedPreferences): Int {
     }
     return current
 }
-
-private fun weeklyShareIntent(streak: Int, stats: WeeklyStats): android.content.Intent =
-    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(
-            android.content.Intent.EXTRA_TEXT,
-            "My Shotlist week ✦\n${stats.found} useful finds · ${stats.acted} handled · " +
-                "${streak}-day rhythm\nTop find: ${stats.topType}\n\nScreenshots in. Life out.",
-        )
-    }.let { android.content.Intent.createChooser(it, "Share your Shotlist week") }
 
 private val wrappedFindingTypes = listOf(
     "EVENT", "DEADLINE", "PRODUCT", "PLACE", "CODE", "WIFI", "URL", "PHONE", "TRACKING", "RECIPE",
@@ -1035,6 +1040,7 @@ private fun ActionCard(
     hazeState: dev.chrisbanes.haze.HazeState,
     onAccept: () -> Unit,
     onVault: () -> Unit,
+    onShare: () -> Unit,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1129,6 +1135,21 @@ private fun ActionCard(
                             ),
                         ) {
                             Text(if (locked) "Unlock" else primaryCta(action.kind), fontSize = 14.sp)
+                        }
+                        if (!locked) {
+                            FilledTonalButton(
+                                onClick = onShare,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color.White.copy(alpha = 0.08f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Share,
+                                    contentDescription = "Share card",
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }
