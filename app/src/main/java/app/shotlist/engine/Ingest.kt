@@ -1,0 +1,116 @@
+package app.shotlist.engine
+
+import android.content.ContentUris
+import android.content.Context
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+
+/** Row from MediaStore that we believe is a screenshot. */
+data class ScreenshotRow(val mediaId: Long, val uri: Uri, val takenAt: Long)
+
+/**
+ * Screenshot heuristics per docs/research: OEMs vary folder names and file
+ * naming, so match on relative path OR display name.
+ */
+object ScreenshotFilter {
+    private val nameHints = listOf("screenshot", "screen_shot", "screencap")
+
+    fun looksLikeScreenshot(relativePath: String?, displayName: String?): Boolean {
+        val path = relativePath?.lowercase().orEmpty()
+        val name = displayName?.lowercase().orEmpty()
+        return path.contains("screenshot") || nameHints.any { name.startsWith(it) || name.contains(it) }
+    }
+}
+
+object MediaQueries {
+    private val projection = arrayOf(
+        MediaStore.Images.Media._ID,
+        MediaStore.Images.Media.RELATIVE_PATH,
+        MediaStore.Images.Media.DISPLAY_NAME,
+        MediaStore.Images.Media.DATE_ADDED,
+    )
+
+    /** Newest screenshots first, up to [limit]. */
+    fun recentScreenshots(context: Context, limit: Int, sinceEpochSec: Long = 0): List<ScreenshotRow> {
+        val rows = mutableListOf<ScreenshotRow>()
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Images.Media.DATE_ADDED} > ?",
+            arrayOf(sinceEpochSec.toString()),
+            "${MediaStore.Images.Media.DATE_ADDED} DESC",
+        )?.use { c ->
+            val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val pathCol = c.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
+            val nameCol = c.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+            val dateCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+            while (c.moveToNext() && rows.size < limit) {
+                val path = if (pathCol >= 0) c.getString(pathCol) else null
+                val name = if (nameCol >= 0) c.getString(nameCol) else null
+                if (!ScreenshotFilter.looksLikeScreenshot(path, name)) continue
+                val id = c.getLong(idCol)
+                rows += ScreenshotRow(
+                    mediaId = id,
+                    uri = ContentUris.withAppendedId(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id
+                    ),
+                    takenAt = c.getLong(dateCol) * 1000,
+                )
+            }
+        }
+        return rows
+    }
+}
+
+/**
+ * Watches MediaStore for new images and enqueues ingest work for anything that
+ * looks like a fresh screenshot. Lifetime-scoped to the app process for v1;
+ * a foreground service can adopt it later if OEM battery policy demands.
+ */
+class MediaObserver(private val context: Context) {
+    private var lastSeenSec = System.currentTimeMillis() / 1000
+    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            val fresh = MediaQueries.recentScreenshots(context, limit = 5, sinceEpochSec = lastSeenSec)
+            if (fresh.isNotEmpty()) {
+                lastSeenSec = System.currentTimeMillis() / 1000
+                fresh.forEach { IngestWorker.enqueue(context, it) }
+            }
+        }
+    }
+
+    fun start() {
+        context.contentResolver.registerContentObserver(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer,
+        )
+    }
+
+    fun stop() {
+        context.contentResolver.unregisterContentObserver(observer)
+    }
+}
+
+object IngestWorker {
+    const val KEY_MEDIA_ID = "mediaId"
+    const val KEY_URI = "uri"
+    const val KEY_TAKEN_AT = "takenAt"
+
+    fun enqueue(context: Context, row: ScreenshotRow) {
+        val req = OneTimeWorkRequestBuilder<OcrIngestWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putLong(KEY_MEDIA_ID, row.mediaId)
+                    .putString(KEY_URI, row.uri.toString())
+                    .putLong(KEY_TAKEN_AT, row.takenAt)
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(context).enqueue(req)
+    }
+}
