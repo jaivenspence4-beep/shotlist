@@ -70,7 +70,7 @@ import app.shotlist.data.Finding
 import app.shotlist.engine.IngestWorker
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.privacy.PrivacyPolicyScreen
-import app.shotlist.ui.theme.OrbStyle
+import app.shotlist.ui.theme.LivingScene
 import app.shotlist.ui.theme.ShotlistPalette
 import dev.chrisbanes.haze.HazeState
 
@@ -84,9 +84,9 @@ fun YouScreen(
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
     palette: ShotlistPalette,
-    orbStyle: OrbStyle,
+    livingScene: LivingScene,
     onPaletteChanged: (ShotlistPalette) -> Unit,
-    onOrbStyleChanged: (OrbStyle) -> Unit,
+    onLivingSceneChanged: (LivingScene) -> Unit,
     onOpenShatter: () -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
@@ -257,16 +257,16 @@ fun YouScreen(
                     modifier = Modifier.padding(vertical = 14.dp),
                     color = Color.White.copy(alpha = 0.08f),
                 )
-                Text("Light motion", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Living background", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(Modifier.height(5.dp))
-                OrbStyle.entries.forEach { choice ->
+                LivingScene.entries.forEach { choice ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onOrbStyleChanged(choice)
+                                onLivingSceneChanged(choice)
                             }
                             .padding(vertical = 8.dp),
                     ) {
@@ -278,7 +278,7 @@ fun YouScreen(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
                             )
                         }
-                        if (choice == orbStyle) {
+                        if (choice == livingScene) {
                             Icon(
                                 Icons.Outlined.CheckCircle,
                                 contentDescription = "Selected",

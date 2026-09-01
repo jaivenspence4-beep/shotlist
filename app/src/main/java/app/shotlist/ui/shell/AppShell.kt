@@ -116,15 +116,15 @@ import app.shotlist.data.ShotlistDb
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.onboarding.OnboardingFlow
-import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.detail.FindingDetailSheet
+import app.shotlist.ui.liquidbg.LiquidBackground
 import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
 import app.shotlist.ui.share.ShareCardGenerator
-import app.shotlist.ui.theme.OrbStyle
+import app.shotlist.ui.theme.LivingScene
 import app.shotlist.ui.theme.ShotlistPalette
 import app.shotlist.ui.theme.ShotlistTheme
 import app.shotlist.ui.track.TrackScreen
@@ -162,24 +162,28 @@ fun AppShell() {
                 ?: ShotlistPalette.COSMIC,
         )
     }
-    var orbStyle by remember {
+    var livingScene by remember {
         mutableStateOf(
-            appearancePrefs.getString("orb_style", null)
-                ?.let { runCatching { OrbStyle.valueOf(it) }.getOrNull() }
-                ?: OrbStyle.DRIFT,
+            appearancePrefs.getString("living_scene", null)
+                ?.let { runCatching { LivingScene.valueOf(it) }.getOrNull() }
+                ?: when (appearancePrefs.getString("orb_style", null)) {
+                    "HALO" -> LivingScene.NOISE_FIELD
+                    "AURORA" -> LivingScene.FIREFLIES
+                    else -> LivingScene.PHASE_BEAM
+                },
         )
     }
-    ShotlistTheme(palette = palette, orbStyle = orbStyle) {
+    ShotlistTheme(palette = palette) {
         AppShellContent(
             palette = palette,
-            orbStyle = orbStyle,
+            livingScene = livingScene,
             onPaletteChanged = {
                 palette = it
                 appearancePrefs.edit().putString("palette", it.name).apply()
             },
-            onOrbStyleChanged = {
-                orbStyle = it
-                appearancePrefs.edit().putString("orb_style", it.name).apply()
+            onLivingSceneChanged = {
+                livingScene = it
+                appearancePrefs.edit().putString("living_scene", it.name).apply()
             },
         )
     }
@@ -189,9 +193,9 @@ fun AppShell() {
 @Composable
 private fun AppShellContent(
     palette: ShotlistPalette,
-    orbStyle: OrbStyle,
+    livingScene: LivingScene,
     onPaletteChanged: (ShotlistPalette) -> Unit,
-    onOrbStyleChanged: (OrbStyle) -> Unit,
+    onLivingSceneChanged: (LivingScene) -> Unit,
 ) {
     val context = LocalContext.current
     val mainActivity = context as? MainActivity
@@ -209,6 +213,7 @@ private fun AppShellContent(
 
     if (!onboardingComplete) {
         OnboardingFlow(
+            sceneKey = livingScene.sceneKey,
             onFinished = {
                 prefs.edit().putBoolean("complete", true).apply()
                 onboardingComplete = true
@@ -444,7 +449,10 @@ private fun AppShellContent(
             .background(glassBackgroundBrush())
             .hazeSource(state = hazeState),
     ) {
-        GlassBackdrop()
+        LiquidBackground(
+            sceneKey = livingScene.sceneKey,
+            streak = dailyStreak,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -556,9 +564,9 @@ private fun AppShellContent(
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
                         palette = palette,
-                        orbStyle = orbStyle,
+                        livingScene = livingScene,
                         onPaletteChanged = onPaletteChanged,
-                        onOrbStyleChanged = onOrbStyleChanged,
+                        onLivingSceneChanged = onLivingSceneChanged,
                         onOpenShatter = {
                             recallOpen = false
                             shatterOpen = true

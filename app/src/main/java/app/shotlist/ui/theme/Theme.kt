@@ -9,8 +9,6 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -22,13 +20,11 @@ enum class ShotlistPalette(val label: String, val emoji: String) {
     SUNSET("Sunset", "◉"),
 }
 
-enum class OrbStyle(val label: String, val detail: String) {
-    DRIFT("Drift", "Slow and dreamy"),
-    HALO("Halo", "Calm concentric light"),
-    AURORA("Aurora", "Bright and playful"),
+enum class LivingScene(val label: String, val detail: String, val sceneKey: String) {
+    PHASE_BEAM("Phase Beam", "Classic Android light ribbons", "phasebeam"),
+    NOISE_FIELD("Noise Field", "Quiet stars drifting through glass", "noisefield"),
+    FIREFLIES("Fireflies", "A warm swarm that grows with your streak", "fireflies"),
 }
-
-val LocalOrbStyle = staticCompositionLocalOf { OrbStyle.DRIFT }
 
 private val CosmicDark = darkColorScheme(
     primary = Color(0xFFA8B8FF),
@@ -112,7 +108,6 @@ fun ShotlistTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     palette: ShotlistPalette = ShotlistPalette.COSMIC,
-    orbStyle: OrbStyle = OrbStyle.DRIFT,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
@@ -131,11 +126,9 @@ fun ShotlistTheme(
             ShotlistPalette.SUNSET -> SunsetLight
         }
     }
-    CompositionLocalProvider(LocalOrbStyle provides orbStyle) {
-        MaterialTheme(
-            colorScheme = colorScheme,
-            typography = ShotlistTypography,
-            content = content,
-        )
-    }
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = ShotlistTypography,
+        content = content,
+    )
 }
