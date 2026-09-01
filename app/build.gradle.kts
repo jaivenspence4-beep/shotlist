@@ -58,8 +58,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // Liquid glass: real backdrop blur with graceful pre-12 fallback
-    implementation("dev.chrisbanes.haze:haze:1.2.1")
-    implementation("dev.chrisbanes.haze:haze-materials:1.2.1")
+    implementation("dev.chrisbanes.haze:haze:1.5.3")
+    implementation("dev.chrisbanes.haze:haze-materials:1.5.3")
 
     // Engine
     implementation("com.google.mlkit:text-recognition:16.0.1")
