@@ -573,7 +573,7 @@ private fun ActionCard(
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                AnimatedVisibility(visible = dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
                     Text("Done", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
