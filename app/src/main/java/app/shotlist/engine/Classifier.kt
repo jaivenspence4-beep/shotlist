@@ -19,7 +19,7 @@ object Classifier {
      * shipped without a bump and stale junk survived on-device through two
      * installs. If you touched this file, you almost certainly bump this.
      */
-    const val VERSION = 6
+    const val VERSION = 7
 
     /** Suggestions below this never reach the inbox. */
     private const val CONFIDENCE_FLOOR = 0.55f

@@ -63,18 +63,27 @@ object DateTimeParser {
     private val relativeRe =
         Regex("\\b(today|tonight|tomorrow)\\b", RegexOption.IGNORE_CASE)
 
+    /** Date and time must sit near each other to combine: a chat's clock
+     *  stamp at the top and a "Friday" three paragraphs later are unrelated
+     *  (S26 field row id71). */
+    private const val PROXIMITY_CHARS = 120
+
     fun parse(text: String, now: LocalDateTime = LocalDateTime.now()): Parsed? {
         val date = parseDate(text, now.toLocalDate())
         val time = parseTime(text)
+        val near = date != null && time != null &&
+            kotlin.math.abs(date.third - time.third) <= PROXIMITY_CHARS
         return when {
-            date != null && time != null -> Parsed(
-                LocalDateTime.of(date.first, time.first),
+            near -> Parsed(
+                LocalDateTime.of(date!!.first, time!!.first),
                 confidence = 0.9f,
                 matched = "${date.second} ${time.second}",
             )
             date != null -> Parsed(
                 LocalDateTime.of(date.first, LocalTime.of(9, 0)),
-                confidence = 0.6f,
+                // A bare weekday is weak evidence — chat messages say
+                // "friday" constantly without meaning a calendar event.
+                confidence = if (date.fourth) 0.5f else 0.6f,
                 matched = date.second,
             )
             time != null -> {
@@ -88,16 +97,24 @@ object DateTimeParser {
         }
     }
 
+    private data class DateHit(
+        val first: LocalDate,
+        val second: String,
+        val third: Int,
+        /** true when the only evidence was a bare weekday name */
+        val fourth: Boolean = false,
+    )
+
     fun toEpochMillis(parsed: Parsed, zone: ZoneId = ZoneId.systemDefault()): Long =
         parsed.at.atZone(zone).toInstant().toEpochMilli()
 
-    private fun parseDate(text: String, today: LocalDate): Pair<LocalDate, String>? {
+    private fun parseDate(text: String, today: LocalDate): DateHit? {
         relativeRe.find(text)?.let { m ->
             val d = when (m.value.lowercase(Locale.US)) {
                 "tomorrow" -> today.plusDays(1)
                 else -> today // today / tonight
             }
-            return d to m.value
+            return DateHit(d, m.value, m.range.first)
         }
         monthDay.find(text)?.let { m ->
             val month = months[m.groupValues[1].lowercase(Locale.US).take(4).trimEnd('.')]
@@ -110,7 +127,7 @@ object DateTimeParser {
                 LocalDate.of(year ?: today.year, month, day)
             }.getOrNull() ?: return@let
             if (year == null && date.isBefore(today)) date = date.plusYears(1)
-            return date to m.value
+            return DateHit(date, m.value, m.range.first)
         }
         numericDate.find(text)?.let { m ->
             val a = m.groupValues[1].toIntOrNull() ?: return@let
@@ -124,18 +141,18 @@ object DateTimeParser {
             }
             var date = runCatching { LocalDate.of(year, a, b) }.getOrNull() ?: return@let
             if (rawYear == null && date.isBefore(today)) date = date.plusYears(1)
-            return date to m.value
+            return DateHit(date, m.value, m.range.first)
         }
         weekdayRe.find(text)?.let { m ->
             val dow = weekdays[m.value.lowercase(Locale.US)] ?: return@let
             var date = today.with(TemporalAdjusters.nextOrSame(dow))
             if (date == today) date = today.with(TemporalAdjusters.next(dow))
-            return date to m.value
+            return DateHit(date, m.value, m.range.first, fourth = true)
         }
         return null
     }
 
-    private fun parseTime(text: String): Pair<LocalTime, String>? {
+    private fun parseTime(text: String): Triple<LocalTime, String, Int>? {
         val m = timeRe.find(text) ?: return null
         return if (m.groupValues[3].isNotEmpty()) {
             var hour = m.groupValues[1].toIntOrNull() ?: return null
@@ -144,11 +161,11 @@ object DateTimeParser {
             val pm = m.groupValues[3].equals("pm", ignoreCase = true)
             if (pm && hour != 12) hour += 12
             if (!pm && hour == 12) hour = 0
-            LocalTime.of(hour, minute) to m.value
+            Triple(LocalTime.of(hour, minute), m.value, m.range.first)
         } else {
             val hour = m.groupValues[4].toIntOrNull() ?: return null
             val minute = m.groupValues[5].toIntOrNull() ?: return null
-            LocalTime.of(hour, minute) to m.value
+            Triple(LocalTime.of(hour, minute), m.value, m.range.first)
         }
     }
 }

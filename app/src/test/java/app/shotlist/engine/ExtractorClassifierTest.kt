@@ -172,6 +172,26 @@ class ExtractorClassifierTest {
     }
 
     @Test
+    fun `meeting ids are not tracking numbers`() {
+        // Device row id72: Teams meeting id matched the loose FedEx regex.
+        val text = "Teams Meeting\nMeeting ID: 297890066377802\nJoin now"
+        assertTrue(Extractor.extract(text).tracking.isEmpty())
+        // With shipping language present, loose numerics still count.
+        val shipped = "Your package shipped!\n297890066377802"
+        assertEquals(listOf("297890066377802"), Extractor.extract(shipped).tracking)
+    }
+
+    @Test
+    fun `a chat timestamp cannot lend its time to a distant weekday`() {
+        // Device row id71: clock at top, "meeting Friday" far below.
+        val filler = "lorem ipsum talk talk ".repeat(12)
+        val text = "jared · 4:24 PM\n$filler\nabout that meeting friday, rsvp ok?"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        // Bare weekday (0.5) fails the real-date bar; no timed card invented.
+        assertTrue(findings.none { it.whenAt != null })
+    }
+
+    @Test
     fun `card expiry on a payment screen is never a deadline`() {
         // Device row id62: Little Caesars checkout.
         val text = "Little Caesars Checkout\nVisa ending 4242\nExpires: 05/31\npayment due"

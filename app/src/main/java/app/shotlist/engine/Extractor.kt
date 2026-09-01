@@ -38,10 +38,16 @@ object Extractor {
         RegexOption.IGNORE_CASE,
     )
 
-    private val trackingRes = listOf(
+    // Branded formats stand alone; the loose FedEx numerics matched a Teams
+    // meeting id in the field, so they only count next to shipping language.
+    private val brandedTrackingRes = listOf(
         Regex("\\b1Z[0-9A-Z]{16}\\b"),                  // UPS
         Regex("\\b(?:94|93|92|95)\\d{18,20}\\b"),        // USPS
-        Regex("\\b\\d{12}\\b|\\b\\d{15}\\b"),            // FedEx (loose)
+    )
+    private val looseTrackingRe = Regex("\\b\\d{12}\\b|\\b\\d{15}\\b")
+    private val shippingAnchor = Regex(
+        "(tracking|package|shipped|shipment|fedex|ups|usps|out for delivery)",
+        RegexOption.IGNORE_CASE,
     )
 
     private val addressRe = Regex(
@@ -69,11 +75,14 @@ object Extractor {
             .distinct()
             .toList()
 
-        val tracking = trackingRes.asSequence()
-            .flatMap { it.findAll(text) }
-            .map { it.value }
-            .distinct()
-            .toList()
+        val tracking = buildList {
+            brandedTrackingRes.forEach { re ->
+                re.findAll(text).forEach { add(it.value) }
+            }
+            if (shippingAnchor.containsMatchIn(text)) {
+                looseTrackingRe.findAll(text).forEach { add(it.value) }
+            }
+        }.distinct()
 
         return Signals(
             datetime = DateTimeParser.parse(text),
