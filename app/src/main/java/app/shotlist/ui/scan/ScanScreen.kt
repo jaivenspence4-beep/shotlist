@@ -1,10 +1,14 @@
 package app.shotlist.ui.scan
 
 import android.Manifest
+import android.app.Activity
+import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -81,6 +85,9 @@ import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.IngestWorker
 import app.shotlist.engine.ScreenshotRow
 import app.shotlist.ui.glass.GlassPanel
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import dev.chrisbanes.haze.HazeState
 import java.io.File
 import kotlinx.coroutines.delay
@@ -130,6 +137,8 @@ fun ScanScreen(
     var captureMode by remember { mutableStateOf(ScanMode.ANYTHING) }
     var captureMediaId by remember { mutableStateOf<Long?>(null) }
     var resultShot by remember { mutableStateOf<Shot?>(null) }
+    var documentPdfUri by remember { mutableStateOf<Uri?>(null) }
+    var documentPageCount by remember { mutableStateOf(0) }
     var errorMessage by remember { mutableStateOf("") }
     val imageCapture = remember {
         ImageCapture.Builder()
@@ -139,6 +148,42 @@ fun ScanScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> cameraGranted = granted }
+    val documentOptions = remember {
+        GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(20)
+            .setResultFormats(
+                GmsDocumentScannerOptions.RESULT_FORMAT_JPEG,
+                GmsDocumentScannerOptions.RESULT_FORMAT_PDF,
+            )
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+    }
+    val documentScanner = remember(documentOptions) {
+        GmsDocumentScanning.getClient(documentOptions)
+    }
+    val documentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { activityResult ->
+        if (activityResult.resultCode == Activity.RESULT_OK) {
+            val scanResult = GmsDocumentScanningResult.fromActivityResultIntent(activityResult.data)
+            val pdf = scanResult?.pdf
+            if (pdf != null) {
+                documentPdfUri = pdf.uri
+                documentPageCount = pdf.pageCount
+                scanResult.pages?.firstOrNull()?.imageUri?.let { pageUri ->
+                    IngestWorker.enqueueShared(context, pageUri)
+                }
+                captureMode = ScanMode.DOCS
+                phase = CapturePhase.Result
+            } else {
+                errorMessage = "The scanner finished without a PDF. Try again."
+                phase = CapturePhase.Error
+            }
+        } else {
+            phase = CapturePhase.Ready
+        }
+    }
 
     LaunchedEffect(captureMediaId) {
         val mediaId = captureMediaId ?: return@LaunchedEffect
@@ -259,11 +304,19 @@ fun ScanScreen(
                 mode = captureMode,
                 findings = resultFindings,
                 shot = resultShot,
+                documentPdfUri = documentPdfUri,
+                documentPageCount = documentPageCount,
                 errorMessage = errorMessage,
+                onShareDocument = { uri ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    sharePdf(context, uri)
+                },
                 onAgain = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     captureMediaId = null
                     resultShot = null
+                    documentPdfUri = null
+                    documentPageCount = 0
                     errorMessage = ""
                     phase = CapturePhase.Ready
                 },
@@ -283,18 +336,35 @@ fun ScanScreen(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     phase = CapturePhase.Capturing
                     captureMode = selectedMode
-                    captureToPipeline(
-                        context = context,
-                        imageCapture = imageCapture,
-                        onQueued = { mediaId ->
-                            captureMediaId = mediaId
-                            phase = CapturePhase.Reading
-                        },
-                        onError = { message ->
-                            errorMessage = message
+                    if (selectedMode == ScanMode.DOCS) {
+                        val activity = context as? Activity
+                        if (activity == null) {
+                            errorMessage = "Document scanner is unavailable here."
                             phase = CapturePhase.Error
-                        },
-                    )
+                        } else {
+                            documentScanner.getStartScanIntent(activity)
+                                .addOnSuccessListener { sender ->
+                                    documentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                                }
+                                .addOnFailureListener {
+                                    errorMessage = "Couldn’t open document mode. Try again."
+                                    phase = CapturePhase.Error
+                                }
+                        }
+                    } else {
+                        captureToPipeline(
+                            context = context,
+                            imageCapture = imageCapture,
+                            onQueued = { mediaId ->
+                                captureMediaId = mediaId
+                                phase = CapturePhase.Reading
+                            },
+                            onError = { message ->
+                                errorMessage = message
+                                phase = CapturePhase.Error
+                            },
+                        )
+                    }
                 },
             )
         }
@@ -537,7 +607,10 @@ private fun ResultSheet(
     mode: ScanMode,
     findings: List<Finding>,
     shot: Shot?,
+    documentPdfUri: Uri?,
+    documentPageCount: Int,
     errorMessage: String,
+    onShareDocument: (Uri) -> Unit,
     onAgain: () -> Unit,
 ) {
     val success = phase == CapturePhase.Result
@@ -567,7 +640,20 @@ private fun ResultSheet(
                 Icon(Icons.Outlined.Refresh, contentDescription = "Scan another", tint = accent)
             }
         }
-        if (success && findings.isNotEmpty()) {
+        if (success && mode == ScanMode.DOCS && documentPdfUri != null) {
+            Text(
+                "$documentPageCount ${if (documentPageCount == 1) "page" else "pages"} · cropped, cleaned, PDF-ready",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
+            )
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(
+                onClick = { onShareDocument(documentPdfUri) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Share PDF", fontWeight = FontWeight.Bold)
+            }
+        } else if (success && findings.isNotEmpty()) {
             findings.take(2).forEach { finding ->
                 Spacer(Modifier.height(8.dp))
                 Text(finding.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -622,6 +708,15 @@ private fun FocusCorners(color: Color, modifier: Modifier = Modifier) {
 
 private fun hasCameraPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+private fun sharePdf(context: Context, uri: Uri) {
+    val send = Intent(Intent.ACTION_SEND)
+        .setType("application/pdf")
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .setClipData(ClipData.newUri(context.contentResolver, "Shotlist document", uri))
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(send, "Share clean PDF"))
+}
 
 private val findingTypes = listOf(
     "EVENT", "DEADLINE", "PRODUCT", "PLACE", "CODE", "WIFI", "TRACKING", "RECIPE",
