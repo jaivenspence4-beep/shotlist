@@ -10,6 +10,8 @@ import android.provider.MediaStore
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import java.util.UUID
+import kotlin.math.abs
 
 /** Row from MediaStore that we believe is a screenshot. */
 data class ScreenshotRow(val mediaId: Long, val uri: Uri, val takenAt: Long)
@@ -112,36 +114,48 @@ object IngestWorker {
      * then queued under a stable negative pseudo-id — never colliding with real
      * MediaStore ids, and still deduped by the unique mediaId index.
      */
-    fun enqueueShared(context: Context, uri: Uri) {
+    fun enqueueShared(context: Context, uri: Uri) = enqueueSharedAll(context, listOf(uri))
+
+    /**
+     * Picker path. Copy a selection serially so a large import does not create
+     * one thread per image. UUID-backed names and 63-bit negative pseudo-ids
+     * keep concurrent share, scan, and picker imports from colliding.
+     */
+    fun enqueueSharedAll(context: Context, uris: List<Uri>) {
+        if (uris.isEmpty()) return
         val app = context.applicationContext
-        Thread {
+        Thread({
             val dir = java.io.File(app.filesDir, "shared").apply { mkdirs() }
-            val file = java.io.File(dir, "share-${System.currentTimeMillis()}.img")
-            runCatching {
-                val copied = app.contentResolver.openInputStream(uri)?.use { input ->
-                    file.outputStream().use { input.copyTo(it) }
-                    true
-                } ?: false
-                if (!copied) {
-                    file.delete()
-                    return@runCatching
-                }
-                val pseudoId = -(file.name.hashCode().toLong().let {
-                    if (it == Long.MIN_VALUE) 1L else kotlin.math.abs(it)
-                })
-                enqueue(
-                    app,
-                    ScreenshotRow(
-                        mediaId = pseudoId,
-                        uri = Uri.fromFile(file),
-                        takenAt = System.currentTimeMillis(),
-                    ),
-                )
-            }.onFailure {
-                // Never leave a partial copy behind on a failed share.
+            uris.forEach { uri -> copyAndEnqueue(app, dir, uri) }
+        }, "shotlist-shared-ingest").start()
+    }
+
+    private fun copyAndEnqueue(context: Context, dir: java.io.File, uri: Uri) {
+        val token = UUID.randomUUID()
+        val file = java.io.File(dir, "share-$token.img")
+        runCatching {
+            val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { input.copyTo(it) }
+                true
+            } ?: false
+            if (!copied) {
                 file.delete()
+                return@runCatching
             }
-        }.start()
+            val bits = token.mostSignificantBits xor token.leastSignificantBits
+            val magnitude = if (bits == Long.MIN_VALUE) Long.MAX_VALUE else abs(bits)
+            enqueue(
+                context,
+                ScreenshotRow(
+                    mediaId = -magnitude.coerceAtLeast(1L),
+                    uri = Uri.fromFile(file),
+                    takenAt = System.currentTimeMillis(),
+                ),
+            )
+        }.onFailure {
+            // Never leave a partial copy behind on a failed share or import.
+            file.delete()
+        }
     }
 
     fun enqueue(context: Context, row: ScreenshotRow) {
