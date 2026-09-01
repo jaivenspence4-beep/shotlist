@@ -122,7 +122,7 @@ fun OnboardingFlow(
                 PermissionStep.Intro -> IntroStep(
                     onContinue = {
                         step = PermissionStep.Requesting
-                        permissionLauncher.launch(requiredOnboardingPermissions().toTypedArray())
+                        permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
                     },
                     onShareOnly = onFinished,
                     hazeState = hazeState,
@@ -151,7 +151,7 @@ fun OnboardingFlow(
                 PermissionStep.Denied -> DeniedStep(
                     onRetry = {
                         step = PermissionStep.Requesting
-                        permissionLauncher.launch(requiredOnboardingPermissions().toTypedArray())
+                        permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
                     },
                     onShareOnly = onFinished,
                     hazeState = hazeState,
@@ -277,7 +277,7 @@ private fun DeniedStep(
 @Composable
 private fun PrivacyBullets() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PrivacyBullet(icon = Icons.Outlined.CloudOff, text = "OCR runs on-device. No cloud calls in v1.")
+        PrivacyBullet(icon = Icons.Outlined.CloudOff, text = "Screenshot contents stay on this device.")
         PrivacyBullet(icon = Icons.Outlined.Security, text = "Calendar entries happen only after your tap.")
         PrivacyBullet(icon = Icons.Outlined.NotificationsActive, text = "New screenshots can become useful reminders.")
     }
@@ -294,21 +294,27 @@ private fun PrivacyBullet(icon: androidx.compose.ui.graphics.vector.ImageVector,
 
 @Composable
 private fun RevealRow(reveal: OnboardingReveal) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AssistChip(onClick = { }, label = { Text("${reveal.screenshotsRead} read") })
-        AssistChip(onClick = { }, label = { Text("${reveal.suggestedActions} useful") })
-        AssistChip(onClick = { }, label = { Text("0 bytes uploaded") })
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AssistChip(onClick = { }, label = { Text("${reveal.screenshotsRead} read") })
+            AssistChip(onClick = { }, label = { Text("${reveal.suggestedActions} useful") })
+        }
+        AssistChip(
+            onClick = { },
+            label = { Text("Screenshot contents stay on this device") },
+        )
     }
 }
 
-private fun requiredOnboardingPermissions(): List<String> =
+/**
+ * Onboarding asks only for access needed to scan screenshots. Notification access is
+ * deferred until a future reminder control can request it in context.
+ */
+private fun requiredScreenshotPermissions(): List<String> =
     buildList {
         addAll(requiredImagePermissions())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

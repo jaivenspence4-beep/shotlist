@@ -190,7 +190,7 @@ fun AppShell() {
                         icon = Icons.Outlined.Lock,
                         title = "You",
                         subtitle = "Vault, privacy dashboard, settings, and local-only controls.",
-                        badge = "0 bytes uploaded",
+                        badge = "Screenshot contents stay on this device",
                     )
                 }
             }
@@ -322,7 +322,8 @@ private fun EmptyInboxCard(hazeState: dev.chrisbanes.haze.HazeState) {
         Spacer(Modifier.height(12.dp))
         Text("Nothing actionable yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(
-            "Grant screenshot access or share a screenshot to start. No fake cards, no cloud calls.",
+            "Grant screenshot access or share a screenshot to start. " +
+                "Screenshot contents stay on this device.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         )
