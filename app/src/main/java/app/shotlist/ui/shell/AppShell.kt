@@ -111,6 +111,7 @@ import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.scan.ScanScreen
 import app.shotlist.ui.track.TrackScreen
 import app.shotlist.ui.you.YouScreen
 import dev.chrisbanes.haze.HazeState
@@ -336,13 +337,7 @@ fun AppShell() {
                             setState(it, "DISMISSED")
                         },
                     )
-                    Tab.Scan -> ModulePlaceholder(
-                        hazeState = hazeState,
-                        icon = Icons.Outlined.CameraAlt,
-                        title = "Scan",
-                        subtitle = "Food calories, plants, labels, anything — module slot ready.",
-                        badge = "Next module",
-                    )
+                    Tab.Scan -> ScanScreen(hazeState = hazeState)
                     Tab.Track -> TrackScreen(hazeState = hazeState)
                     Tab.You -> YouScreen(
                         hazeState = hazeState,
