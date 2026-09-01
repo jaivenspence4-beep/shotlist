@@ -23,6 +23,10 @@ class MainActivity : FragmentActivity() {
         private set
     var deepLinkSerial by mutableIntStateOf(0)
         private set
+    var targetTab by mutableStateOf<String?>(null)
+        private set
+    var openVaultRequested by mutableStateOf(false)
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,8 +64,17 @@ class MainActivity : FragmentActivity() {
         val findingId = intent
             ?.getLongExtra(ShotlistActions.EXTRA_FINDING_ID, -1L)
             ?.takeIf { it >= 0 }
-            ?: return
+        val requestedTab = intent?.getStringExtra(EXTRA_TARGET_TAB)
+        val requestedVault = intent?.getBooleanExtra(EXTRA_OPEN_VAULT, false) == true
+        if (findingId == null && requestedTab == null && !requestedVault) return
         deepLinkFindingId = findingId
+        targetTab = requestedTab ?: findingId?.let { "inbox" }
+        openVaultRequested = requestedVault
         deepLinkSerial += 1
+    }
+
+    companion object {
+        const val EXTRA_TARGET_TAB = "targetTab"
+        const val EXTRA_OPEN_VAULT = "openVault"
     }
 }

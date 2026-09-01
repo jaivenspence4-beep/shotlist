@@ -713,8 +713,8 @@ private fun sharePdf(context: Context, uri: Uri) {
     val send = Intent(Intent.ACTION_SEND)
         .setType("application/pdf")
         .putExtra(Intent.EXTRA_STREAM, uri)
-        .setClipData(ClipData.newUri(context.contentResolver, "Shotlist document", uri))
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    send.clipData = ClipData.newUri(context.contentResolver, "Shotlist document", uri)
+    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     context.startActivity(Intent.createChooser(send, "Share clean PDF"))
 }
 

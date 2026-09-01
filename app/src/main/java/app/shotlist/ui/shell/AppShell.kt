@@ -136,8 +136,11 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun AppShell() {
     val context = LocalContext.current
-    val deepLinkFindingId = (context as? MainActivity)?.deepLinkFindingId
-    val deepLinkSerial = (context as? MainActivity)?.deepLinkSerial ?: 0
+    val mainActivity = context as? MainActivity
+    val deepLinkFindingId = mainActivity?.deepLinkFindingId
+    val deepLinkSerial = mainActivity?.deepLinkSerial ?: 0
+    val requestedTab = mainActivity?.targetTab
+    val openVaultRequested = mainActivity?.openVaultRequested == true
     val haptics = LocalHapticFeedback.current
     val prefs = remember(context) {
         context.getSharedPreferences("shotlist_onboarding", android.content.Context.MODE_PRIVATE)
@@ -205,6 +208,11 @@ fun AppShell() {
             )
             .build()
     }
+    LaunchedEffect(deepLinkSerial, biometricPrompt) {
+        if (requestedTab == "you" && openVaultRequested) {
+            biometricPrompt?.authenticate(vaultPromptInfo)
+        }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -217,7 +225,13 @@ fun AppShell() {
         findings.map { it.toShotlistAction() }
     }
     LaunchedEffect(deepLinkSerial) {
-        if (deepLinkFindingId != null) selected = Tab.Inbox.ordinal
+        selected = when (requestedTab) {
+            "inbox" -> Tab.Inbox.ordinal
+            "scan" -> Tab.Scan.ordinal
+            "track" -> Tab.Track.ordinal
+            "you" -> Tab.You.ordinal
+            else -> if (deepLinkFindingId != null) Tab.Inbox.ordinal else selected
+        }
     }
     val vaultedFindingIds = remember(vaultedFindings) {
         vaultedFindings.mapTo(mutableSetOf()) { it.id }
