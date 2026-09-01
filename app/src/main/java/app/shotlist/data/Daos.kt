@@ -33,8 +33,10 @@ interface ShotDao {
 
 @Dao
 interface FindingDao {
+    /** Returns row ids in input order — the moment-loop notification must
+     *  deep-link to the real persisted finding. */
     @Insert
-    suspend fun insertAll(findings: List<Finding>)
+    suspend fun insertAll(findings: List<Finding>): List<Long>
 
     @Query("SELECT * FROM findings WHERE state = 'SUGGESTED' ORDER BY createdAt DESC")
     fun inbox(): Flow<List<Finding>>

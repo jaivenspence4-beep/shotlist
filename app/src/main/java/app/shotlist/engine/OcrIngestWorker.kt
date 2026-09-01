@@ -52,7 +52,21 @@ class OcrIngestWorker(
         val findings = Classifier.classify(shotId, text, signals).filter { f ->
             db.findings().duplicates(f.type, f.title, f.payload, f.whenAt) == 0
         }
-        db.findings().insertAll(findings)
+        val ids = db.findings().insertAll(findings)
+
+        // The moment loop: an actionable screenshot answers back immediately.
+        // Backfill floods are exempt — only fresh screenshots feel alive,
+        // a 100-notification onboarding would be a massacre.
+        val isFresh = System.currentTimeMillis() - takenAt < 5 * 60_000L
+        if (isFresh) {
+            findings.zip(ids).forEach { (f, id) ->
+                if (f.type == "EVENT" || f.type == "DEADLINE") {
+                    app.shotlist.actions.ShotlistActions.postNewFinding(
+                        applicationContext, f.copy(id = id),
+                    )
+                }
+            }
+        }
         db.shots().markProcessed(
             id = shotId,
             text = text,
