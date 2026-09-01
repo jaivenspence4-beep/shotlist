@@ -102,6 +102,7 @@ import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.track.TrackScreen
 import app.shotlist.ui.you.YouScreen
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -256,13 +257,7 @@ fun AppShell() {
                         subtitle = "Food calories, plants, labels, anything — module slot ready.",
                         badge = "Next module",
                     )
-                    Tab.Track -> ModulePlaceholder(
-                        hazeState = hazeState,
-                        icon = Icons.Outlined.CalendarMonth,
-                        title = "Track",
-                        subtitle = "Cycle, habits, streaks. Private and local-first.",
-                        badge = "Platform",
-                    )
+                    Tab.Track -> TrackScreen(hazeState = hazeState)
                     Tab.You -> YouScreen(
                         hazeState = hazeState,
                         screenshotsChecked = shotCount,
