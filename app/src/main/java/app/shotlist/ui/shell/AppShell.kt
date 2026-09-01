@@ -123,6 +123,7 @@ import app.shotlist.ui.theme.ShotlistPalette
 import app.shotlist.ui.theme.ShotlistTheme
 import app.shotlist.ui.track.TrackScreen
 import app.shotlist.ui.you.YouScreen
+import app.shotlist.widget.ShotlistWidgets
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
@@ -229,6 +230,9 @@ private fun AppShellContent(
     var notificationPermissionResult by remember { mutableIntStateOf(0) }
     val dailyStreak = remember(prefs) { updateDailyStreak(prefs) }
     val weeklyStats = remember(findingHistory) { buildWeeklyStats(findingHistory) }
+    LaunchedEffect(findings, vaultedFindings) {
+        ShotlistWidgets.updateAll(context)
+    }
     val activity = context as? FragmentActivity
     val biometricPrompt = remember(activity) {
         activity?.let {

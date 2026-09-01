@@ -38,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,7 @@ import app.shotlist.data.Habit
 import app.shotlist.data.HabitTick
 import app.shotlist.data.ShotlistDb
 import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.widget.ShotlistWidgets
 import dev.chrisbanes.haze.HazeState
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -85,6 +87,9 @@ fun TrackScreen(
     val habits by db.habits().active().collectAsState(initial = emptyList())
     val ticks by db.habits().ticksSince(todayEpoch - 90).collectAsState(initial = emptyList())
     var showAddHabit by remember { mutableStateOf(false) }
+    LaunchedEffect(habits, ticks) {
+        ShotlistWidgets.updateAll(context)
+    }
 
     val periodStarts = remember(entries) { periodStarts(entries) }
     val typicalCycle = remember(periodStarts) { averageCycleLength(periodStarts) }

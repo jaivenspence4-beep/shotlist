@@ -15,6 +15,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Column
 import androidx.glance.layout.Spacer
@@ -68,6 +69,14 @@ class VaultWidget : GlanceAppWidget() {
 
 class VaultWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = VaultWidget()
+}
+
+object ShotlistWidgets {
+    suspend fun updateAll(context: Context) {
+        NextUpWidget().updateAll(context)
+        StreakWidget().updateAll(context)
+        VaultWidget().updateAll(context)
+    }
 }
 
 private data class WidgetSnapshot(
