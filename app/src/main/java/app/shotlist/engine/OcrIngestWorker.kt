@@ -46,6 +46,19 @@ class OcrIngestWorker(
             text = text,
             status = if (findings.isEmpty()) "IGNORED" else "PROCESSED",
         )
+
+        // Retention: a share-sheet copy that produced no findings has no further
+        // use (nothing references its thumbnail) — delete it rather than let
+        // junk accumulate in app storage. Copies with findings stay for cards.
+        if (findings.isEmpty() && mediaId < 0) {
+            val uri = Uri.parse(uriStr)
+            if (uri.scheme == "file") {
+                uri.path?.let { path ->
+                    val file = java.io.File(path)
+                    if (file.parentFile?.name == "shared") file.delete()
+                }
+            }
+        }
         return Result.success()
     }
 

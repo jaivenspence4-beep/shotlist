@@ -29,12 +29,17 @@ object ScreenshotFilter {
 }
 
 object MediaQueries {
-    private val projection = arrayOf(
-        MediaStore.Images.Media._ID,
-        MediaStore.Images.Media.RELATIVE_PATH,
-        MediaStore.Images.Media.DISPLAY_NAME,
-        MediaStore.Images.Media.DATE_ADDED,
-    )
+    // RELATIVE_PATH exists only from API 29; querying it on 26-28 throws on the
+    // first scan (caught by the Play-readiness audit). Filter falls back to
+    // display-name hints there.
+    private val projection = buildList {
+        add(MediaStore.Images.Media._ID)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            add(MediaStore.Images.Media.RELATIVE_PATH)
+        }
+        add(MediaStore.Images.Media.DISPLAY_NAME)
+        add(MediaStore.Images.Media.DATE_ADDED)
+    }.toTypedArray()
 
     /** Newest screenshots first, up to [limit]. */
     fun recentScreenshots(context: Context, limit: Int, sinceEpochSec: Long = 0): List<ScreenshotRow> {
