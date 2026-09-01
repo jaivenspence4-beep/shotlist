@@ -1,5 +1,11 @@
 package app.shotlist.ui.glass
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -14,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -80,34 +87,56 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
     val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
     val tertiary = MaterialTheme.colorScheme.tertiary
+    val transition = rememberInfiniteTransition(label = "glass-drift")
+    val drift by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 14_000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "orb-drift",
+    )
     Canvas(modifier = modifier.fillMaxSize()) {
         val radius = size.minDimension * 0.58f
+        val primaryCenter = Offset(
+            size.width * (0.05f + drift * 0.035f),
+            size.height * (0.18f + drift * 0.015f),
+        )
+        val secondaryCenter = Offset(
+            size.width * (0.98f - drift * 0.025f),
+            size.height * (0.53f + drift * 0.02f),
+        )
+        val tertiaryCenter = Offset(
+            size.width * (0.22f + drift * 0.025f),
+            size.height * (0.92f - drift * 0.018f),
+        )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(primary.copy(alpha = 0.44f), primary.copy(alpha = 0.08f), Color.Transparent),
-                center = Offset(size.width * 0.05f, size.height * 0.18f),
+                colors = listOf(primary.copy(alpha = 0.52f), primary.copy(alpha = 0.10f), Color.Transparent),
+                center = primaryCenter,
                 radius = radius,
             ),
             radius = radius,
-            center = Offset(size.width * 0.05f, size.height * 0.18f),
+            center = primaryCenter,
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(secondary.copy(alpha = 0.30f), Color.Transparent),
-                center = Offset(size.width * 0.98f, size.height * 0.53f),
+                colors = listOf(secondary.copy(alpha = 0.37f), Color.Transparent),
+                center = secondaryCenter,
                 radius = radius * 0.9f,
             ),
             radius = radius * 0.9f,
-            center = Offset(size.width * 0.98f, size.height * 0.53f),
+            center = secondaryCenter,
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(tertiary.copy(alpha = 0.26f), Color.Transparent),
-                center = Offset(size.width * 0.22f, size.height * 0.92f),
+                colors = listOf(tertiary.copy(alpha = 0.33f), Color.Transparent),
+                center = tertiaryCenter,
                 radius = radius * 0.72f,
             ),
             radius = radius * 0.72f,
-            center = Offset(size.width * 0.22f, size.height * 0.92f),
+            center = tertiaryCenter,
         )
     }
 }
