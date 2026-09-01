@@ -57,7 +57,16 @@ object Extractor {
         RegexOption.IGNORE_CASE,
     )
 
-    fun extract(text: String): Signals {
+    /**
+     * [reference] is the moment the SCREENSHOT was taken, not the moment we
+     * scan it: "tomorrow 5:30" inside an Aug-10 screenshot means Aug 11 —
+     * resolving it against backfill time invented future events from stale
+     * pages (Jaiven's Zillow-tour field catch).
+     */
+    fun extract(
+        text: String,
+        reference: java.time.LocalDateTime = java.time.LocalDateTime.now(),
+    ): Signals {
         val prices = priceRe.findAll(text).mapNotNull { m ->
             val whole = m.groupValues[1].toLongOrNull() ?: return@mapNotNull null
             val cents = m.groupValues[2].toLongOrNull() ?: 0
@@ -85,7 +94,7 @@ object Extractor {
         }.distinct()
 
         return Signals(
-            datetime = DateTimeParser.parse(text),
+            datetime = DateTimeParser.parse(text, reference),
             prices = prices,
             urls = urlRe.findAll(text).map { it.value }.distinct().toList(),
             phones = phoneRe.findAll(text).map { it.value.trim() }.distinct().toList(),

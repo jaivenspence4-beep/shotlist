@@ -107,5 +107,5 @@ internal fun buildScene(key: String, streak: Int): Scene = when (key) {
     "fireflies" -> Scene.Fireflies(
         seedDots(count = 14 + streak.coerceIn(0, 30), seed = 7_2026)
     )
-    else -> Scene.PhaseBeam(seedBeams())
+    else -> seedPhaseBeam()
 }

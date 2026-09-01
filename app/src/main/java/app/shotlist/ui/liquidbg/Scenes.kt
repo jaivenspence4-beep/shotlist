@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.rotate
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
@@ -26,20 +25,17 @@ import kotlin.random.Random
 // necessarily rebuilt per frame (their geometry moves) — the static
 // background gradients are hoisted below.
 internal sealed interface Scene {
-    data class PhaseBeam(val beams: List<Beam>) : Scene
+    data class PhaseBeam(val dots: List<Mote>, val beams: List<Mote>) : Scene
     data class NoiseField(val dots: List<Dot>) : Scene
     data class Fireflies(val dots: List<Dot>) : Scene
 }
 
-internal data class Beam(
-    val phase: Float,      // 0..1 start offset along the drift path
-    val speed: Float,      // path traversals per ~40s
-    val breadth: Float,    // fraction of min dimension
-    val length: Float,     // fraction of diagonal
-    val tilt: Float,       // degrees
-    val alpha: Float,
-    val thin: Boolean,     // the bright accent lines of the original
-)
+/**
+ * A PhaseBeam particle, faithful to the AOSP phasebeam.rs model: position in
+ * the original's coordinate space (x drifts, y rises, z gives parallax —
+ * speed and size both scale with z exactly as the original computed them).
+ */
+internal data class Mote(val x0: Float, val y0: Float, val z: Float)
 
 internal data class Dot(
     val x: Float, val y: Float,          // home position, 0..1
@@ -51,29 +47,27 @@ internal data class Dot(
 // Locally seeded per call with a stable per-scene seed: geometry is identical
 // every time a scene opens, regardless of what was viewed before (review
 // catch — a shared mutable rng made scenes order-dependent).
-internal fun seedBeams(seed: Int = 20101122): List<Beam> {
+/**
+ * Seeds per the original phasebeam.rs: dots at x∈[0,3), y∈[-1.25,1.25), on
+ * three depth layers (z=25 far, z=14 mid, z∈[6,14) near); beams at
+ * x∈[-1.25,1.25), y∈[-1.05,1.205), z∈[2,17.5).
+ */
+internal fun seedPhaseBeam(seed: Int = 20101122): Scene.PhaseBeam {
     val rng = Random(seed) // 2010-11-22: the era PhaseBeam shipped
-    return List(5) {
-        Beam(
-            phase = rng.nextFloat(),
-            speed = 0.5f + rng.nextFloat() * 0.7f,
-            breadth = 0.10f + rng.nextFloat() * 0.16f,
-            length = 0.55f + rng.nextFloat() * 0.35f,
-            tilt = -32f + rng.nextFloat() * 8f,
-            alpha = 0.08f + rng.nextFloat() * 0.08f,
-            thin = false,
-        )
-    } + List(2) {
-        Beam(
-            phase = rng.nextFloat(),
-            speed = 1.1f + rng.nextFloat() * 0.6f,
-            breadth = 0.004f,
-            length = 0.5f + rng.nextFloat() * 0.3f,
-            tilt = -30f,
-            alpha = 0.30f,
-            thin = true,
-        )
+    val dots = List(60) { i ->
+        val z = when {
+            i % 3 == 0 -> 25f
+            i % 3 == 1 -> 14f
+            else -> 6f + rng.nextFloat() * 8f
+        }
+        Mote(rng.nextFloat() * 3f, -1.25f + rng.nextFloat() * 2.5f, z)
     }
+    val beams = List(12) { i ->
+        val z = if (i < 4) (4f + rng.nextFloat() * 6f) / 2f
+        else (4f + rng.nextFloat() * 31f) / 2f
+        Mote(-1.25f + rng.nextFloat() * 2.5f, -1.05f + rng.nextFloat() * 2.255f, z)
+    }
+    return Scene.PhaseBeam(dots, beams)
 }
 
 internal fun seedDots(count: Int, seed: Int): List<Dot> {
@@ -91,40 +85,58 @@ internal fun seedDots(count: Int, seed: Int): List<Dot> {
 
 // ---------------------------------------------------------------- PhaseBeam
 
-private val beamDeepTop = Color(0xFF060A1E)
-private val beamDeepMid = Color(0xFF10214F)
-private val beamDeepBot = Color(0xFF1B3A78)
-private val beamLight = Color(0xFF8FC2FF)
 
-// Static backgrounds hoisted — coordinate-free vertical gradients adapt to
-// the draw area, so one instance serves every frame.
-private val phaseBeamBg =
-    Brush.verticalGradient(0f to beamDeepTop, 0.55f to beamDeepMid, 1f to beamDeepBot)
+// The genuine article: black base fading to deep blue at the horizon, cyan
+// dots rising on three parallax layers, vertical light beams climbing with
+// them — motion model transcribed from phasebeam.rs (66ms frame → ×15.15
+// converts its per-frame speeds to per-second).
+private val phaseBg = Brush.verticalGradient(
+    0f to Color(0xFF000000), 0.6f to Color(0xFF02050E), 1f to Color(0xFF0A1E3C),
+)
+private val phaseDot = Color(0xFFAFE3FF)
+private val phaseBeamLight = Color(0xFF4FC3F7)
+private const val FRAME = 15.15f
 
 internal fun DrawScope.drawPhaseBeam(scene: Scene.PhaseBeam, t: Float) {
-    drawRect(phaseBeamBg)
-    val diag = size.width + size.height
-    scene.beams.forEach { b ->
-        // Drift diagonally up-right, wrapping with margin so entry/exit is soft.
-        val progress = ((t * b.speed / 40f) + b.phase) % 1.3f - 0.15f
-        val cx = progress * size.width * 1.3f
-        val cy = size.height * (1.1f - progress * 1.2f)
-        val len = diag * b.length
-        val wide = size.minDimension * b.breadth
-        rotate(degrees = b.tilt, pivot = Offset(cx, cy)) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    0f to beamLight.copy(alpha = 0f),
-                    0.5f to beamLight.copy(alpha = b.alpha),
-                    1f to beamLight.copy(alpha = 0f),
-                    startX = cx - len / 2, endX = cx + len / 2,
-                ),
-                topLeft = Offset(cx - len / 2, cy - wide / 2),
-                size = Size(len, wide),
-                blendMode = BlendMode.Plus,
-            )
-        }
+    drawRect(phaseBg)
+    scene.dots.forEach { m ->
+        val y = wrap(m.y0 + 0.00022f * m.z * FRAME * t, -1.25f, 1.25f)
+        val x = wrap(m.x0 + 0.0001f * m.z * FRAME * t, 0f, 3f)
+        val pos = Offset(
+            (x / 3f) * size.width,
+            (1f - (y + 1.25f) / 2.5f) * size.height,
+        )
+        val r = size.minDimension * (0.09f / m.z)
+        val a = (0.2f + 2.5f / m.z).coerceAtMost(0.8f)
+        drawCircle(phaseDot.copy(alpha = a * 0.15f), r * 3f, pos)
+        drawCircle(phaseDot.copy(alpha = a), r, pos)
     }
+    scene.beams.forEach { m ->
+        val y = wrap(m.y0 + 0.00016f * m.z * FRAME * t, -1.05f, 1.205f)
+        val x = wrap(m.x0 + 0.000156f * m.z * FRAME * t, -1.25f, 1.25f)
+        val sx = ((x + 1.25f) / 2.5f) * size.width
+        val sy = (1f - (y + 1.05f) / 2.255f) * size.height
+        val h = size.height * (1.4f / m.z).coerceIn(0.08f, 0.7f)
+        val w = (size.minDimension * 0.10f / m.z).coerceAtLeast(3f)
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to phaseBeamLight.copy(alpha = 0f),
+                0.5f to phaseBeamLight.copy(alpha = (1.8f / m.z).coerceAtMost(0.45f)),
+                1f to phaseBeamLight.copy(alpha = 0f),
+                startY = sy - h / 2, endY = sy + h / 2,
+            ),
+            topLeft = Offset(sx - w / 2, sy - h / 2),
+            size = Size(w, h),
+            blendMode = BlendMode.Plus,
+        )
+    }
+}
+
+private fun wrap(v: Float, lo: Float, hi: Float): Float {
+    val range = hi - lo
+    var r = (v - lo) % range
+    if (r < 0) r += range
+    return lo + r
 }
 
 // --------------------------------------------------------------- NoiseField

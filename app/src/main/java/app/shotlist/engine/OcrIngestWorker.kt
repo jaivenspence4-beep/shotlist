@@ -46,7 +46,9 @@ class OcrIngestWorker(
             return Result.retry()
         }
 
-        val signals = Extractor.extract(text)
+        val takenAtRef = java.time.Instant.ofEpochMilli(takenAt)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        val signals = Extractor.extract(text, reference = takenAtRef)
         // Cross-shot dedupe: people screenshot the same page repeatedly — the
         // S26 field test had one Zillow listing minted four times.
         val findings = Classifier.classify(shotId, text, signals).filter { f ->

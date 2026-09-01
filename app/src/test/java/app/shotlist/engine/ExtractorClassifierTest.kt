@@ -217,6 +217,16 @@ class ExtractorClassifierTest {
     }
 
     @Test
+    fun `relative dates resolve against screenshot time not scan time`() {
+        // Jaiven's Zillow catch: "Tomorrow 5:30" in an Aug-10 screenshot must
+        // resolve to Aug 11 — long past by scan time — and never card.
+        val text = "Request a tour\nNext: Tomorrow, 5:30 pm\nRSVP · open house"
+        val takenAug10 = java.time.LocalDateTime.of(2026, 8, 10, 9 , 0)
+        val findings = Classifier.classify(1L, text, Extractor.extract(text, takenAug10))
+        assertTrue(findings.none { it.whenAt != null })
+    }
+
+    @Test
     fun `explicit past dates never become cards`() {
         // Build-36 device row: a letter dated with an explicit year in the past.
         val text = "Dear Stacey, Brian, Jasmine, and Flint,\n" +
