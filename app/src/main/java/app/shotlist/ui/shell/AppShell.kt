@@ -65,7 +65,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -337,9 +336,7 @@ private fun HeroCard(
     GlassPanel(
         hazeState = hazeState,
         cornerRadius = 36.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(24.dp, RoundedCornerShape(36.dp), spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             "$scannedCount screenshots read",
