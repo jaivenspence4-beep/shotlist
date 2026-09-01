@@ -16,23 +16,24 @@ object EngineApi {
      * improving future screenshots.
      */
     fun ensureFreshClassification(context: Context) {
-        val app = context.applicationContext
-        val prefs = app.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
+        // NB: don't name this "app" — it shadows the app.shotlist package root.
+        val appCtx = context.applicationContext
+        val prefs = appCtx.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
         if (prefs.getInt("classifier_version", 0) >= Classifier.VERSION) return
         Thread {
             kotlinx.coroutines.runBlocking {
-                val db = app.shotlist.data.ShotlistDb.get(app)
+                val db = app.shotlist.data.ShotlistDb.get(appCtx)
                 db.findings().purgeSuggested()
                 db.shots().purgeOrphans()
             }
             prefs.edit().putInt("classifier_version", Classifier.VERSION).apply()
             val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-                app, android.Manifest.permission.READ_MEDIA_IMAGES,
+                appCtx, android.Manifest.permission.READ_MEDIA_IMAGES,
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
                 androidx.core.content.ContextCompat.checkSelfPermission(
-                    app, android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    appCtx, android.Manifest.permission.READ_EXTERNAL_STORAGE,
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (granted) backfill(app, limit = 100)
+            if (granted) backfill(appCtx, limit = 100)
         }.start()
     }
 
