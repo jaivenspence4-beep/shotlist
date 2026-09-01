@@ -130,3 +130,10 @@ bridge board
 
 Exit codes: `0` fine, `1` refused with a reason on stderr, `2` you are unidentified or
 an `inbox --wait` timed out.
+
+## Shared device (added 2026-08-31, Jaiven's rule)
+
+Android Studio and Jaiven's attached phone are a single-driver resource: claim the
+DEVICE LOCK task on the board before driving either (adb, installs, Studio
+interaction), and release it the moment you stop. Observing output is always allowed.
+Never drive while the other agent holds the lock — do not overload the phone.
