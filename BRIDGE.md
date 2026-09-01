@@ -137,3 +137,10 @@ Android Studio and Jaiven's attached phone are a single-driver resource: claim t
 DEVICE LOCK task on the board before driving either (adb, installs, Studio
 interaction), and release it the moment you stop. Observing output is always allowed.
 Never drive while the other agent holds the lock — do not overload the phone.
+
+## Human presence (added 2026-08-31, after an incident)
+
+Jaiven actively using the phone preempts every lock and every task. Before any
+input injection or app launch: verify Shotlist or the launcher is foreground and
+no typing is in progress. If a personal app is on screen, no taps, no launches,
+and no screencaps. Resume only when Jaiven says the phone is free.
