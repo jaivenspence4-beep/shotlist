@@ -2,27 +2,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Screenshot ingest (sideload phase; Play declaration prepared per docs/research) -->
+    <!-- Screenshot ingest (sideload phase; Play declaration prepared per docs/store) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- WAKE_LOCK: WorkManager holds brief locks while OCR jobs run -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Actions: calendar entries are created only after an explicit user tap -->
-    <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
-
-    <!-- Scan modules -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
+    <!-- The privacy claim, enforced structurally: no code path in this process —
+         ours or any library's — can transmit anything, because the permission is
+         stripped even if a dependency's manifest requests it. Calendar entries
+         use ACTION_INSERT (no permission needed); camera/FGS/boot return only
+         when the module that uses them ships. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
 
     <application
         android:name=".ShotlistApp"
