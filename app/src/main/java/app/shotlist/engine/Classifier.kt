@@ -129,6 +129,8 @@ object Classifier {
                     shotId = shotId, type = "WIFI", title = ssid,
                     snippet = "Wi-Fi password saved — tap to copy when you need it",
                     payload = pw, confidence = 0.85f,
+                    // Sensitive by nature: vaults itself, zero user effort.
+                    vaulted = true,
                 )
             }
         }
@@ -137,6 +139,7 @@ object Classifier {
                 shotId = shotId, type = "CODE", title = "Code for ${title ?: "later"}",
                 snippet = "Tap to copy — hidden until you need it",
                 payload = code, confidence = 0.7f,
+                vaulted = true,
             )
         }
         s.tracking.take(1).forEach { t ->

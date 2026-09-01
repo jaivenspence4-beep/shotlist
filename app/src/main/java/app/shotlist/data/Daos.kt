@@ -63,4 +63,15 @@ interface FindingDao {
     /** Engine upgraded: stored suggestions were made by an older, dumber brain. */
     @Query("DELETE FROM findings WHERE state = 'SUGGESTED'")
     suspend fun purgeSuggested()
+
+    // --- Vault ---
+
+    @Query("SELECT * FROM findings WHERE vaulted = 1 AND state != 'DISMISSED' ORDER BY createdAt DESC")
+    fun vaulted(): Flow<List<Finding>>
+
+    @Query("UPDATE findings SET vaulted = :vaulted WHERE id = :id")
+    suspend fun setVaulted(id: Long, vaulted: Boolean)
+
+    @Query("SELECT COUNT(*) FROM findings WHERE vaulted = 1 AND state != 'DISMISSED'")
+    fun vaultedCount(): Flow<Int>
 }
