@@ -397,12 +397,7 @@ private fun HeroCard(
         contentPadding = PaddingValues(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(
-            "$displayCount screenshots checked",
-            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 36.sp, lineHeight = 40.sp),
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        ScreenshotCount(displayCount)
         Spacer(Modifier.height(8.dp))
         Text(
             "Found $actionCount useful thing${if (actionCount == 1) "" else "s"} hiding in plain sight.",
@@ -447,12 +442,7 @@ private fun EmptyInboxCard(
             )
         }
         Spacer(Modifier.height(16.dp))
-        Text(
-            "$displayCount screenshots checked",
-            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 38.sp, lineHeight = 42.sp),
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        ScreenshotCount(displayCount)
         Spacer(Modifier.height(8.dp))
         Text(
             if (hasScreenshotAccess) {
@@ -479,6 +469,25 @@ private fun EmptyInboxCard(
             "Private by design · screenshot contents stay here",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.86f),
+        )
+    }
+}
+
+@Composable
+private fun ScreenshotCount(count: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 40.sp, lineHeight = 42.sp),
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "screenshots\nchecked",
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, lineHeight = 17.sp),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         )
     }
 }
@@ -564,7 +573,9 @@ private fun ActionCard(
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Text("Done", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                AnimatedVisibility(visible = dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                    Text("Done", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
             }
         },
     ) {
