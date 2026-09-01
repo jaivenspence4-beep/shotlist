@@ -161,6 +161,15 @@ class ExtractorClassifierTest {
     }
 
     @Test
+    fun `explicit past dates never become cards`() {
+        // Build-36 device row: a letter dated with an explicit year in the past.
+        val text = "Dear Stacey, Brian, Jasmine, and Flint,\n" +
+            "payment due August 23, 2020\nregister by then"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.whenAt != null })
+    }
+
+    @Test
     fun `snippets read like sentences not raw matches`() {
         val s = Extractor.extract(flyer)
         val event = Classifier.classify(1L, flyer, s).first { it.type == "EVENT" }

@@ -12,9 +12,14 @@ import java.time.format.DateTimeFormatter
  */
 object Classifier {
 
-    /** Bump when classification logic changes: stored SUGGESTED findings from
-     *  older versions are purged and shots re-scanned (EngineApi). */
-    const val VERSION = 3
+    /**
+     * BUMP THIS ON EVERY CHANGE TO PERSISTED OUTPUT — titles, gates, snippets,
+     * anything. Stored SUGGESTED findings from older versions are purged and
+     * shots re-scanned (EngineApi). Field-proven failure mode: round-3 gates
+     * shipped without a bump and stale junk survived on-device through two
+     * installs. If you touched this file, you almost certainly bump this.
+     */
+    const val VERSION = 4
 
     /** Suggestions below this never reach the inbox. */
     private const val CONFIDENCE_FLOOR = 0.55f
@@ -90,9 +95,15 @@ object Classifier {
         val anchors = maxOf(eventScore, deadlineScore)
         val anchorsNeeded = if (isRelative == true) 2 else 1
 
-        if (hasRealDate && anchors >= anchorsNeeded && title != null) {
+        // A past event is not actionable: explicit-year dates ("Aug 23, 2026"
+        // in an old letter) dodge the parser's future-bias and minted cards
+        // for things already over.
+        val nowMs = System.currentTimeMillis()
+        if (hasRealDate && anchors >= anchorsNeeded && title != null &&
+            DateTimeParser.toEpochMillis(datetime!!) > nowMs - 24 * 3600_000L
+        ) {
             val isDeadline = deadlineScore > eventScore
-            val whenAt = DateTimeParser.toEpochMillis(datetime!!)
+            val whenAt = DateTimeParser.toEpochMillis(datetime)
             out += Finding(
                 shotId = shotId,
                 type = if (isDeadline) "DEADLINE" else "EVENT",
