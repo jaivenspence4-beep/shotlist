@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Rounded glass tile -->
+    <path
+        android:fillColor="#1E2A44"
+        android:pathData="M34,30 h40 a8,8 0 0 1 8,8 v40 a8,8 0 0 1 -8,8 h-40 a8,8 0 0 1 -8,-8 v-40 a8,8 0 0 1 8,-8 z" />
+    <!-- Glass highlight sweep -->
+    <path
+        android:fillColor="#3B82F6"
+        android:fillAlpha="0.55"
+        android:pathData="M34,30 h20 l-24,24 v-16 a8,8 0 0 1 4,-8 z" />
+    <!-- Lightning-bolt 'it acted' glyph -->
+    <path
+        android:fillColor="#E8F0FF"
+        android:pathData="M58,38 L44,60 h9 l-4,14 16,-24 h-9 z" />
+</vector>
