@@ -161,6 +161,17 @@ class ExtractorClassifierTest {
     }
 
     @Test
+    fun `ocr-concatenated domains are rejected as titles`() {
+        // Device row id=61 on build-37: "25 tiktok.comview/prod" re-created.
+        val text = "25 tiktok.comview/prod\nsale price $12.99\n" +
+            "add to cart · free shipping · order"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none {
+            it.title.contains("tiktok") || it.title.contains("comview")
+        })
+    }
+
+    @Test
     fun `explicit past dates never become cards`() {
         // Build-36 device row: a letter dated with an explicit year in the past.
         val text = "Dear Stacey, Brian, Jasmine, and Flint,\n" +

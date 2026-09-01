@@ -19,7 +19,7 @@ object Classifier {
      * shipped without a bump and stale junk survived on-device through two
      * installs. If you touched this file, you almost certainly bump this.
      */
-    const val VERSION = 4
+    const val VERSION = 5
 
     /** Suggestions below this never reach the inbox. */
     private const val CONFIDENCE_FLOOR = 0.55f
@@ -56,9 +56,12 @@ object Classifier {
     // Lines that must never become card titles: URLs, emails, UI fragments.
     // Domain tokens are rejected even without a trailing slash — OCR mangles
     // "order.littlecaesars.com" into fragments that dodged the old pattern.
+    // No trailing \b on domain suffixes: OCR concatenates ("tiktok.comview")
+    // and the boundary let it through. Over-rejection is safe for titles —
+    // the next line gets a chance instead.
     private val junkTitle = Regex(
         "(://|www\\.|@\\w+\\.|^\\W+$|^[%/|•·\\-_=+ ]|\\.\\w{2,4}/|" +
-            "\\.(com|net|org|io|co|app|gov|edu|me|tv)\\b)",
+            "\\.(com|net|org|io|co|app|gov|edu|me|tv))",
         RegexOption.IGNORE_CASE,
     )
     private val uiNoiseTitles = setOf(
