@@ -29,9 +29,14 @@ class OcrIngestWorker(
         if (mediaId == 0L) return Result.failure()
 
         val db = ShotlistDb.get(applicationContext)
-        if (db.shots().byMediaId(mediaId) != null) return Result.success() // dedupe
 
-        val shotId = db.shots().insert(
+        // Dedupe — but a row still in NEW state is an earlier attempt that
+        // failed before OCR (Result.retry lands here again): resume it instead
+        // of declaring victory, or retries would never actually retry.
+        val existing = db.shots().byMediaId(mediaId)
+        if (existing != null && existing.status != "NEW") return Result.success()
+
+        val shotId = existing?.id ?: db.shots().insert(
             Shot(mediaId = mediaId, uri = uriStr, takenAt = takenAt)
         )
         if (shotId <= 0) return Result.success() // conflict: another worker got it
@@ -47,10 +52,11 @@ class OcrIngestWorker(
             status = if (findings.isEmpty()) "IGNORED" else "PROCESSED",
         )
 
-        // Retention: a share-sheet copy that produced no findings has no further
-        // use (nothing references its thumbnail) — delete it rather than let
-        // junk accumulate in app storage. Copies with findings stay for cards.
-        if (findings.isEmpty() && mediaId < 0) {
+        // Retention: nothing in the app reads a share-sheet copy after OCR —
+        // no consumer renders Shot.uri — so every copy is deleted once its
+        // text and findings are stored. If thumbnails ship later, this becomes
+        // conditional again.
+        if (mediaId < 0) {
             val uri = Uri.parse(uriStr)
             if (uri.scheme == "file") {
                 uri.path?.let { path ->

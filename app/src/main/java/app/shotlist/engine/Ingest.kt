@@ -115,12 +115,17 @@ object IngestWorker {
     fun enqueueShared(context: Context, uri: Uri) {
         val app = context.applicationContext
         Thread {
+            val dir = java.io.File(app.filesDir, "shared").apply { mkdirs() }
+            val file = java.io.File(dir, "share-${System.currentTimeMillis()}.img")
             runCatching {
-                val dir = java.io.File(app.filesDir, "shared").apply { mkdirs() }
-                val file = java.io.File(dir, "share-${System.currentTimeMillis()}.img")
-                app.contentResolver.openInputStream(uri)?.use { input ->
+                val copied = app.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { input.copyTo(it) }
-                } ?: return@runCatching
+                    true
+                } ?: false
+                if (!copied) {
+                    file.delete()
+                    return@runCatching
+                }
                 val pseudoId = -(file.name.hashCode().toLong().let {
                     if (it == Long.MIN_VALUE) 1L else kotlin.math.abs(it)
                 })
@@ -132,6 +137,9 @@ object IngestWorker {
                         takenAt = System.currentTimeMillis(),
                     ),
                 )
+            }.onFailure {
+                // Never leave a partial copy behind on a failed share.
+                file.delete()
             }
         }.start()
     }

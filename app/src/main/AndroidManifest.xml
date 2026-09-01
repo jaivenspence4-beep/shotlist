@@ -10,7 +10,8 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- POST_NOTIFICATIONS returns with the first real reminder-enable control
+         (t16 removed the onboarding request; the receiver is still a no-op). -->
     <!-- WAKE_LOCK: WorkManager holds brief locks while OCR jobs run -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -31,6 +32,8 @@
     <application
         android:name=".ShotlistApp"
         android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
