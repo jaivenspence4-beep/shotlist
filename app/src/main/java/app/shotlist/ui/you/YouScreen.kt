@@ -1,5 +1,8 @@
 package app.shotlist.ui.you
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -37,6 +40,8 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.WifiPassword
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
@@ -56,12 +61,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.shotlist.data.Finding
+import app.shotlist.engine.IngestWorker
 import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.ui.privacy.PrivacyPolicyScreen
 import app.shotlist.ui.theme.OrbStyle
 import app.shotlist.ui.theme.ShotlistPalette
 import dev.chrisbanes.haze.HazeState
@@ -89,8 +97,19 @@ fun YouScreen(
     onDeleteAllData: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current.applicationContext
     val haptics = LocalHapticFeedback.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var lastImportCount by remember { mutableStateOf<Int?>(null) }
+    val screenshotPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 50),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            lastImportCount = uris.size
+            IngestWorker.enqueueSharedAll(context, uris)
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -287,6 +306,25 @@ fun YouScreen(
                 accent = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                ActionRow(
+                    icon = Icons.Outlined.PhotoLibrary,
+                    title = "Import screenshots",
+                    detail = lastImportCount?.let { count ->
+                        val noun = if (count == 1) "image" else "images"
+                        "$count selected $noun sent for on-device processing"
+                    } ?: "Choose specific images · no library permission",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        screenshotPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
                 SettingRow(
                     icon = Icons.Outlined.ImageSearch,
                     title = "Watch new screenshots",
@@ -354,6 +392,20 @@ fun YouScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 ActionRow(
+                    icon = Icons.Outlined.Policy,
+                    title = "Privacy policy",
+                    detail = "What Shotlist accesses, stores, and shares",
+                    accent = MaterialTheme.colorScheme.secondary,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showPrivacyPolicy = true
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
+                ActionRow(
                     icon = Icons.Outlined.BugReport,
                     title = "Share bug report",
                     detail = "You choose where the local log goes",
@@ -420,6 +472,10 @@ fun YouScreen(
                 }
             },
         )
+    }
+
+    if (showPrivacyPolicy) {
+        PrivacyPolicyScreen(onClose = { showPrivacyPolicy = false })
     }
 }
 
@@ -516,9 +572,9 @@ private fun PrivacySeal(
             }
             Spacer(Modifier.width(14.dp))
             Column {
-                Text("Stays on this device", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("Screenshots stay on-device", fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Text(
-                    "0 bytes sent. No account. No cloud.",
+                    "No screenshot uploads. No account. No ads.",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
                 )
@@ -528,7 +584,7 @@ private fun PrivacySeal(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PrivacyMetric("$screenshotsChecked", "checked", MaterialTheme.colorScheme.primary)
             PrivacyMetric("$thingsReady", "ready", MaterialTheme.colorScheme.tertiary)
-            PrivacyMetric("0", "sent", MaterialTheme.colorScheme.secondary)
+            PrivacyMetric("0", "uploaded", MaterialTheme.colorScheme.secondary)
         }
     }
 }

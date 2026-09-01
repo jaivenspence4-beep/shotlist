@@ -9,23 +9,18 @@ watch, subscription, and cloud features must not appear in the listing until the
 ## Release verdict
 
 **Not ready for Play submission yet.** The product has a credible broad-photo-access
-case, but the bundle, disclosure, fallback, and privacy claims need work before review.
+case, but permission review evidence, disclosure, public privacy publication, and the
+release bundle still need work before review.
 
 ### P0 blockers
 
 | Blocker | Why it matters | Required outcome |
 | --- | --- | --- |
-| `compileSdk` / `targetSdk = 35` | Starting 2026-08-31, new mobile apps and updates submitted to Play must target Android 16 / API 36 unless an extension applies. | Compile and target API 36, then regression-test photo access, sharing, notifications, calendar intents, and edge-to-edge UI on Android 16. |
 | Broad image permission is not yet review-ready | `READ_MEDIA_IMAGES` requires a declaration proving persistent or frequent access is indispensable to the app's promoted core function. Approval is not automatic. | Use the declaration and review video below. Keep screenshot scanning as the first and dominant listing promise. |
-| Permission fallback is too hidden | A user who declines broad access can receive externally shared images, but there is no visible in-app import control. Play requires a reasonable minimum-scope alternative. | Add an `Import screenshots` action backed by Android Photo Picker and retain the share-sheet path. The automatic loop may remain the full-access benefit. |
 | Disclosure is incomplete | The pre-permission screen says Shotlist scans screenshots, but it does not plainly state the scope, storage, and fallback in one disclosure immediately before the system prompt. | Use the disclosure copy below, followed by a distinct affirmative button. Ask for notifications later, in context, rather than in the image-permission batch. |
-| Privacy policy is not reachable in-app | Apps accessing sensitive data need a public privacy-policy URL in Play Console and an in-app link. | Publish the companion privacy-policy draft as a non-PDF public page and link it from onboarding and the You tab. Replace every placeholder. |
-| `0 bytes uploaded` needs release-level proof | Commit `ab9b08a` strips `INTERNET` and `ACCESS_NETWORK_STATE` during manifest merge, preventing ordinary in-process network access. However, ML Kit's current SDK disclosure says bundled features collect app/device information, performance metrics, and a per-installation identifier; manifest removal alone does not prove the SDK never hands telemetry to another Google process. | Inspect the merged manifest, run release traffic/IPC tests on a Google Play services device, and reconcile the result with Play's SDK Index. Until then, use `Screenshot contents stay on this device` and the conservative Data Safety answer below. |
-| Notification permission is premature | `POST_NOTIFICATIONS` is requested during onboarding, but the registered reminder receiver is a no-op and no shipping loop posts notifications. Sensitive permissions must support a current, promoted feature and should be requested in context. | Remove it for this release, or finish and test the reminder loop and request notification access only when the user enables a reminder. |
-| Android 14 partial access path is inconsistent | Code requests `READ_MEDIA_VISUAL_USER_SELECTED`, but the app manifest does not declare it, and there is no picker-based reselection UI. | Implement and test selected-photo access correctly or remove the partial-mode claim and rely on Photo Picker/share sheet. |
-| Android 8–9 screenshot queries need an API guard | The app supports API 26, but its MediaStore projection unconditionally includes `RELATIVE_PATH`, which was added in API 29. The first scan can fail on supported older devices. | On API 26–28 omit `RELATIVE_PATH` and filter by display-name hints; add tests for both projection paths. |
-| Local data has no in-app deletion/retention control | OCR text, findings, screenshot URIs, codes, and copied share-sheet images persist in app storage. Shared image copies are not deleted after OCR. | Add `Delete all Shotlist data`; define retention; delete temporary shared images after processing when no longer needed; test uninstall/clear-data behavior. |
-| Android backup conflicts with the privacy posture | `android:allowBackup="true"` may permit platform-managed backup of the Room database and preferences, including OCR-derived data. | Disable backup or add explicit backup/data-extraction rules excluding screenshot-derived data. State the final behavior in the privacy policy. |
+| Public privacy policy is not published | Apps accessing sensitive data need a public privacy-policy URL in Play Console and an in-app link. The in-app policy and You-tab link now ship. | Replace every placeholder in the companion draft, publish it as a stable non-PDF public page, add that URL to Play Console, and reconcile the in-app copy with the final release AAB. |
+| ML Kit Data Safety needs release-level proof | Commit `ab9b08a` strips `INTERNET` and `ACCESS_NETWORK_STATE` during manifest merge, preventing ordinary in-process network access. However, ML Kit's current SDK disclosure says bundled features collect app/device information, performance metrics, and a per-installation identifier; manifest removal alone does not prove the SDK never hands telemetry to another Google process. | Inspect the merged manifest, run release traffic/IPC tests on a Google Play services device, and reconcile the result with Play's SDK Index. Until then, use screenshot-specific upload wording and the conservative Data Safety answer below. |
+| Notification permission context is too broad | The reminder loop now ships, but `POST_NOTIFICATIONS` is requested before every kind of first primary action, including code and place actions that never schedule a reminder. | Ask only when a user accepts an event/deadline or explicitly enables reminders, with nearby copy explaining the alert benefit. |
 
 ### P1 submission gates
 
@@ -50,6 +45,20 @@ case, but the bundle, disclosure, fallback, and privacy claims need work before 
 - Added merge-level removal of transitive `INTERNET` and `ACCESS_NETWORK_STATE`.
 - Kept `WAKE_LOCK` for WorkManager's bounded OCR jobs; confirm its presence and purpose
   in the final merged manifest.
+
+### Resolved by the current store-readiness pass
+
+- Raised `compileSdk` and `targetSdk` to Android 16 / API 36; CI unit tests and the
+  debug APK build pass. Physical Android 16 regression remains part of the release gate.
+- Added a visible `Import screenshots` action using Android Photo Picker. Multi-select
+  imports are copied serially into private storage before OCR, and the existing Android
+  share-sheet path remains available.
+- Added a full in-app privacy policy reachable from the You tab and replaced the
+  absolute `0 bytes sent` dashboard claim with screenshot-specific upload wording.
+- Declared Android 14 selected-photo access and added picker-based reselection.
+- Guarded `RELATIVE_PATH` on Android 8–9 while retaining filename fallback filtering.
+- Added `Delete all my data`, deletes temporary imported images after OCR, and disabled
+  Android backup for Shotlist's local screenshot-derived data.
 
 ## Photo permission declaration
 
@@ -80,7 +89,7 @@ case, but the bundle, disclosure, fallback, and privacy claims need work before 
 > Users who decline broad access can still import selected images with Photo Picker or
 > share individual screenshots to Shotlist.
 
-Only include the Photo Picker sentence after that in-app control ships.
+The Photo Picker sentence now matches the shipping in-app control.
 
 ### Data minimization — paste-ready draft
 
@@ -205,8 +214,8 @@ in the video. If Play still rejects the declaration, ship the picker/share build
 > You stay in control. Shotlist never saves a calendar event without your confirmation,
 > and you can revoke photo access at any time in Android Settings.
 
-Do not publish the Photo Picker claims until the control exists. Until reliable
-closed-app ingest ships, retain the qualifier `while Shotlist is active`.
+The Photo Picker claims now match the shipping control. Until reliable closed-app
+ingest ships, retain the qualifier `while Shotlist is active`.
 
 ### First release notes
 
