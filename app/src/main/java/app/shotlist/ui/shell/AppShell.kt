@@ -62,7 +62,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -648,7 +647,11 @@ private fun ActionCard(
     val accent = actionColor(action.kind)
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            if (value != SwipeToDismissBoxValue.Settled) onDismiss()
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> onDismiss()
+                SwipeToDismissBoxValue.EndToStart -> onSnooze()
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
             value != SwipeToDismissBoxValue.Settled
         },
     )
@@ -659,10 +662,18 @@ private fun ActionCard(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 18.dp),
-                contentAlignment = Alignment.CenterEnd,
+                contentAlignment = if (dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd) {
+                    Alignment.CenterStart
+                } else {
+                    Alignment.CenterEnd
+                },
             ) {
                 if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-                    Text("Done", color = accent, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd) "Done" else "Later",
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         },
@@ -688,7 +699,7 @@ private fun ActionCard(
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "${kindLabel(action.kind)} · ${action.source}",
+                        "${kindLabel(action.kind)} · From screenshot",
                         style = MaterialTheme.typography.labelMedium,
                         color = accent.copy(alpha = 0.92f),
                     )
@@ -702,9 +713,6 @@ private fun ActionCard(
                             ),
                         ) {
                             Text(primaryCta(action.kind), fontSize = 14.sp)
-                        }
-                        OutlinedButton(onClick = onSnooze) {
-                            Text("Snooze", fontSize = 14.sp)
                         }
                     }
                 }
