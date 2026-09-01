@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,6 +72,7 @@ import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
 import app.shotlist.data.ShotlistDb
+import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import dev.chrisbanes.haze.hazeSource
@@ -87,8 +89,25 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AppShell() {
-    val hazeState = rememberHazeState()
     val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences("shotlist_onboarding", android.content.Context.MODE_PRIVATE)
+    }
+    var onboardingComplete by rememberSaveable {
+        mutableStateOf(prefs.getBoolean("complete", false))
+    }
+
+    if (!onboardingComplete) {
+        OnboardingFlow(
+            onFinished = {
+                prefs.edit().putBoolean("complete", true).apply()
+                onboardingComplete = true
+            },
+        )
+        return
+    }
+
+    val hazeState = rememberHazeState()
     val db = remember(context) { ShotlistDb.get(context) }
     val scope = rememberCoroutineScope()
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
