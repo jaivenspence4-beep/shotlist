@@ -1,3 +1,11 @@
+/*
+ * Contains work derived from the Android Open Source Project live wallpapers
+ * (platform/packages/wallpapers/ — PhaseBeam, NoiseField),
+ * Copyright (C) The Android Open Source Project, Apache License 2.0
+ * (see /LICENSES/Apache-2.0.txt). MODIFIED: RenderScript renderers
+ * re-implemented as Jetpack Compose Canvas scenes for Shotlist; the
+ * Fireflies scene is original Shotlist work.
+ */
 package app.shotlist.ui.liquidbg
 
 import androidx.compose.ui.geometry.Offset
