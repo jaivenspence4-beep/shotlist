@@ -21,10 +21,12 @@ class OcrIngestWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val mediaId = inputData.getLong(IngestWorker.KEY_MEDIA_ID, -1)
+        // MediaStore ids are positive; share-sheet pseudo-ids are negative.
+        // 0 is the only invalid value (missing input).
+        val mediaId = inputData.getLong(IngestWorker.KEY_MEDIA_ID, 0)
         val uriStr = inputData.getString(IngestWorker.KEY_URI) ?: return Result.failure()
         val takenAt = inputData.getLong(IngestWorker.KEY_TAKEN_AT, System.currentTimeMillis())
-        if (mediaId < 0) return Result.failure()
+        if (mediaId == 0L) return Result.failure()
 
         val db = ShotlistDb.get(applicationContext)
         if (db.shots().byMediaId(mediaId) != null) return Result.success() // dedupe

@@ -48,5 +48,9 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".actions.ShotlistReminderReceiver"
+            android:exported="false" />
     </application>
 </manifest>
