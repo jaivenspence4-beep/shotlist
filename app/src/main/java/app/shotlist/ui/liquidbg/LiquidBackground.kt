@@ -36,9 +36,25 @@ fun LiquidBackground(
     streak: Int = 0,
 ) {
     val context = LocalContext.current
-    val animate = remember {
+    // Live power-save observation: flipping Battery Saver mid-composition
+    // stops the frame loop immediately (review catch — a one-shot sample
+    // left 60fps running).
+    var animate by remember {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        pm?.isPowerSaveMode != true
+        mutableStateOf(pm?.isPowerSaveMode != true)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: android.content.Intent?) {
+                animate = pm?.isPowerSaveMode != true
+            }
+        }
+        context.registerReceiver(
+            receiver,
+            android.content.IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
+        )
+        onDispose { context.unregisterReceiver(receiver) }
     }
     var t by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(animate, sceneKey) {
@@ -80,7 +96,9 @@ internal data class TapPulse(val at: Offset, val tAtBirth: Float)
 fun liquidSceneKeys(): List<String> = listOf("phasebeam", "noisefield", "fireflies")
 
 internal fun buildScene(key: String, streak: Int): Scene = when (key) {
-    "noisefield" -> Scene.NoiseField(seedDots(count = 42))
-    "fireflies" -> Scene.Fireflies(seedDots(count = 14 + streak.coerceIn(0, 30)))
+    "noisefield" -> Scene.NoiseField(seedDots(count = 42, seed = 42_2011))
+    "fireflies" -> Scene.Fireflies(
+        seedDots(count = 14 + streak.coerceIn(0, 30), seed = 7_2026)
+    )
     else -> Scene.PhaseBeam(seedBeams())
 }

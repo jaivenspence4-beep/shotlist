@@ -13,7 +13,10 @@ import kotlin.math.exp
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** Scene models are seeded once (deterministic) — zero allocation per frame. */
+// Scene models are seeded once (deterministic). Dot/beam PARAMS are
+// allocation-free per frame; gradient Brush objects for the moving beams are
+// necessarily rebuilt per frame (their geometry moves) — the static
+// background gradients are hoisted below.
 internal sealed interface Scene {
     data class PhaseBeam(val beams: List<Beam>) : Scene
     data class NoiseField(val dots: List<Dot>) : Scene
@@ -37,10 +40,12 @@ internal data class Dot(
     val flicker: Float,                  // fireflies only
 )
 
-private val rng = Random(20101122) // the year PhaseBeam shipped
-
-internal fun seedBeams(): List<Beam> =
-    List(5) {
+// Locally seeded per call with a stable per-scene seed: geometry is identical
+// every time a scene opens, regardless of what was viewed before (review
+// catch — a shared mutable rng made scenes order-dependent).
+internal fun seedBeams(seed: Int = 20101122): List<Beam> {
+    val rng = Random(seed) // 2010-11-22: the era PhaseBeam shipped
+    return List(5) {
         Beam(
             phase = rng.nextFloat(),
             speed = 0.5f + rng.nextFloat() * 0.7f,
@@ -61,9 +66,11 @@ internal fun seedBeams(): List<Beam> =
             thin = true,
         )
     }
+}
 
-internal fun seedDots(count: Int): List<Dot> =
-    List(count) {
+internal fun seedDots(count: Int, seed: Int): List<Dot> {
+    val rng = Random(seed)
+    return List(count) {
         Dot(
             x = rng.nextFloat(), y = rng.nextFloat(),
             r = 0.004f + rng.nextFloat() * 0.010f,
@@ -72,6 +79,7 @@ internal fun seedDots(count: Int): List<Dot> =
             flicker = 0.6f + rng.nextFloat() * 2.2f,
         )
     }
+}
 
 // ---------------------------------------------------------------- PhaseBeam
 
@@ -80,10 +88,13 @@ private val beamDeepMid = Color(0xFF10214F)
 private val beamDeepBot = Color(0xFF1B3A78)
 private val beamLight = Color(0xFF8FC2FF)
 
+// Static backgrounds hoisted — coordinate-free vertical gradients adapt to
+// the draw area, so one instance serves every frame.
+private val phaseBeamBg =
+    Brush.verticalGradient(0f to beamDeepTop, 0.55f to beamDeepMid, 1f to beamDeepBot)
+
 internal fun DrawScope.drawPhaseBeam(scene: Scene.PhaseBeam, t: Float) {
-    drawRect(
-        Brush.verticalGradient(0f to beamDeepTop, 0.55f to beamDeepMid, 1f to beamDeepBot)
-    )
+    drawRect(phaseBeamBg)
     val diag = size.width + size.height
     scene.beams.forEach { b ->
         // Drift diagonally up-right, wrapping with margin so entry/exit is soft.
@@ -114,8 +125,10 @@ private val fieldTop = Color(0xFF05070F)
 private val fieldBot = Color(0xFF0D1B33)
 private val dotBlue = Color(0xFFBFD9FF)
 
+private val fieldBg = Brush.verticalGradient(0f to fieldTop, 1f to fieldBot)
+
 internal fun DrawScope.drawNoiseField(scene: Scene.NoiseField, t: Float, taps: List<TapPulse>) {
-    drawRect(Brush.verticalGradient(0f to fieldTop, 1f to fieldBot))
+    drawRect(fieldBg)
     scene.dots.forEach { d ->
         var px = (d.x + 0.02f * sin(t * 0.11f + d.phase) + t * 0.006f) % 1f
         var py = d.y + d.wobble * sin(t * 0.23f + d.phase * 2.1f)
@@ -134,8 +147,10 @@ private val nightTop = Color(0xFF070B08)
 private val nightBot = Color(0xFF12200F)
 private val ember = Color(0xFFFFD98C)
 
+private val nightBg = Brush.verticalGradient(0f to nightTop, 1f to nightBot)
+
 internal fun DrawScope.drawFireflies(scene: Scene.Fireflies, t: Float, taps: List<TapPulse>) {
-    drawRect(Brush.verticalGradient(0f to nightTop, 1f to nightBot))
+    drawRect(nightBg)
     scene.dots.forEach { d ->
         val px = d.x + 0.05f * sin(t * 0.17f + d.phase) + 0.02f * cos(t * 0.31f + d.phase * 3f)
         val py = d.y + 0.04f * cos(t * 0.13f + d.phase * 1.7f)

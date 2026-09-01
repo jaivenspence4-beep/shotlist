@@ -3,7 +3,10 @@ Shotlist — third-party notices
 The "Phase Beam" and "Noise Field" living-background scenes are ports of the
 classic Android Open Source Project live wallpapers of the same names
 (platform/packages/wallpapers/, Copyright The Android Open Source Project),
-re-implemented for Jetpack Compose. The originals are licensed under the
-Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+re-implemented for Jetpack Compose in
+app/src/main/java/app/shotlist/ui/liquidbg/ (modified: RenderScript renderers
+replaced with Compose Canvas; geometry, palettes and motion character derived
+from the originals). A full copy of the license is included at
+LICENSES/Apache-2.0.txt.
 
 Classics, reborn.
