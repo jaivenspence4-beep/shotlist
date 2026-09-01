@@ -75,8 +75,8 @@ import app.shotlist.data.ShotlistDb
 import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -107,7 +107,7 @@ fun AppShell() {
         return
     }
 
-    val hazeState = rememberHazeState()
+    val hazeState = remember { HazeState() }
     val db = remember(context) { ShotlistDb.get(context) }
     val scope = rememberCoroutineScope()
     val findings by db.findings().inbox().collectAsState(initial = emptyList())

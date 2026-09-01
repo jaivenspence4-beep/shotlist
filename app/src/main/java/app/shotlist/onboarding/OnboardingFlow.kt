@@ -54,8 +54,8 @@ import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.EngineApi
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 @Composable
 fun OnboardingFlow(
@@ -63,7 +63,7 @@ fun OnboardingFlow(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val hazeState = rememberHazeState()
+    val hazeState = remember { HazeState() }
     val db = remember(context) { ShotlistDb.get(context) }
     val screenshotsRead by db.shots().count().collectAsState(initial = 0)
     val suggestedActions by db.findings().suggestedCount().collectAsState(initial = 0)
