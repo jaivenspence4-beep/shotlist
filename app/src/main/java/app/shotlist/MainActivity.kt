@@ -4,14 +4,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import app.shotlist.engine.IngestWorker
 import app.shotlist.ui.shell.AppShell
 import app.shotlist.ui.theme.ShotlistTheme
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity (a ComponentActivity subclass) is required by
+// BiometricPrompt for the vault; Compose setContent works unchanged.
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
