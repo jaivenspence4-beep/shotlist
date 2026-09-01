@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -385,6 +386,11 @@ private fun AppShellContent(
             delay(1_800)
             successMessage = null
         }
+    }
+
+    BackHandler(enabled = recallOpen || shatterOpen) {
+        recallOpen = false
+        shatterOpen = false
     }
 
     Box(
