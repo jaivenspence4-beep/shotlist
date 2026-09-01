@@ -18,6 +18,19 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        // Deliberately-committed debug keystore (standard "android" passwords,
+        // zero secret value): every CI build signs identically, so adb -r and
+        // phone-side release downloads upgrade in place instead of demanding
+        // an uninstall. The future RELEASE key is a different, private key.
+        getByName("debug") {
+            storeFile = rootProject.file("signing/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
