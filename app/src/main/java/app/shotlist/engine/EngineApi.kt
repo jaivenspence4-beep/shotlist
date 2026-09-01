@@ -9,8 +9,14 @@ import android.content.Context
 object EngineApi {
     private var observer: MediaObserver? = null
 
-    /** Begin watching for new screenshots. Idempotent. Call after permission. */
+    /**
+     * Begin watching for new screenshots. Idempotent. Call after permission.
+     * Also schedules the periodic sweep (survives process death, which the
+     * live observer does not) and runs an immediate catch-up sweep.
+     */
     fun startObserving(context: Context) {
+        SweepWorker.ensureScheduled(context.applicationContext)
+        SweepWorker.sweepNow(context.applicationContext)
         if (observer != null) return
         observer = MediaObserver(context.applicationContext).also { it.start() }
     }
