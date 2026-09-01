@@ -10,8 +10,10 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- POST_NOTIFICATIONS returns with the first real reminder-enable control
-         (t16 removed the onboarding request; the receiver is still a no-op). -->
+    <!-- The moment loop is real now: new actionable screenshot -> instant
+         offer notification. Requested in-context on first card accept, never
+         during onboarding. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- WAKE_LOCK: WorkManager holds brief locks while OCR jobs run -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
