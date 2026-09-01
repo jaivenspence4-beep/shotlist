@@ -97,7 +97,7 @@ object BarcodeDecoder {
                 } else {
                     BarcodeResult(
                         type = "URL",
-                        title = uri.host?.removePrefix("www.") ?: "Web link",
+                        title = uri?.host?.removePrefix("www.") ?: "Web link",
                         detail = target,
                         payload = target,
                         rawValue = raw,
