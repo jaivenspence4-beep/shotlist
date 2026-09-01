@@ -11,6 +11,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.CalendarContract
+import app.shotlist.R
 import java.time.Instant
 
 enum class ActionKind {
@@ -94,7 +95,7 @@ object ShotlistActions {
         )
 
         return Notification.Builder(context, REMINDER_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_shotlist)
             .setContentTitle(action.title)
             .setContentText(action.detail)
             .setStyle(Notification.BigTextStyle().bigText(action.detail))
