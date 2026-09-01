@@ -73,4 +73,26 @@ class ExtractorClassifierTest {
         val s = Extractor.extract("Shipped! 1Z999AA10123456784")
         assertEquals(listOf("1Z999AA10123456784"), s.tracking)
     }
+
+    @Test
+    fun `status bar clock text is never an event`() {
+        // The exact false positive from the S26 field test.
+        val statusBar = "10:34 Mon, Aug 31 M•\nsome app content with no dates"
+        val findings = Classifier.classify(1L, statusBar, Extractor.extract(statusBar))
+        assertTrue("clock text produced $findings", findings.none { it.whenAt != null })
+    }
+
+    @Test
+    fun `a bare date with no semantic anchor produces no event`() {
+        val text = "Jaçobian\nAugust 27\n2026 2:15"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "EVENT" || it.type == "DEADLINE" })
+    }
+
+    @Test
+    fun `one screenshot yields at most one finding per type`() {
+        val text = "Gate code: 1111\nDoor code: 2222\nAccess code: 3333"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertEquals(1, findings.count { it.type == "CODE" })
+    }
 }

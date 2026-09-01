@@ -27,36 +27,45 @@ object Classifier {
         "simmer", "recipe", "servings",
     )
 
+    /** Suggestions below this never reach the inbox — trust beats recall. */
+    private const val CONFIDENCE_FLOOR = 0.55f
+
+    /** More than this per screenshot is noise by definition. */
+    private const val MAX_FINDINGS_PER_SHOT = 4
+
+    // Residual clock/status text ("10:34 Mon, Aug 31 ...") that survives the
+    // bounding-box strip, e.g. inside screenshots OF screenshots.
+    private val clockLine = Regex(
+        "^\\s*\\d{1,2}:\\d{2}\\s*(?:am|pm)?\\s*[·,]?\\s*" +
+            "(mon|tue|wed|thu|fri|sat|sun)\\b.*$",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+    )
+
     fun classify(shotId: Long, text: String, s: Extractor.Signals): List<Finding> {
-        val lower = text.lowercase()
+        val cleaned = clockLine.replace(text, "")
+        val lower = cleaned.lowercase()
         val out = mutableListOf<Finding>()
-        val title = titleFrom(text)
+        val title = titleFrom(cleaned)
 
         val eventScore = score(lower, eventWords)
         val deadlineScore = score(lower, deadlineWords)
 
-        if (s.datetime != null && (eventScore > 0 || deadlineScore > 0)) {
+        // Field data (116 findings from 100 real screenshots, 87 bogus events)
+        // killed the old anchorless branch: a date/time alone is NEVER an
+        // event. It must co-occur with semantic anchors.
+        val datetime = if (clockLine.containsMatchIn(s.datetime?.matched.orEmpty())) null
+        else s.datetime
+        if (datetime != null && (eventScore > 0 || deadlineScore > 0)) {
             val isDeadline = deadlineScore > eventScore
             out += Finding(
                 shotId = shotId,
                 type = if (isDeadline) "DEADLINE" else "EVENT",
                 title = title,
-                snippet = s.datetime.matched,
-                whenAt = DateTimeParser.toEpochMillis(s.datetime),
+                snippet = datetime.matched,
+                whenAt = DateTimeParser.toEpochMillis(datetime),
                 payload = s.addressLine.orEmpty(),
-                confidence = (s.datetime.confidence + 0.1f * (eventScore + deadlineScore))
+                confidence = (datetime.confidence + 0.1f * (eventScore + deadlineScore))
                     .coerceAtMost(1f),
-            )
-        } else if (s.datetime != null && s.datetime.confidence >= 0.6f) {
-            // Explicit date but no keyword — still worth a low-confidence suggestion.
-            out += Finding(
-                shotId = shotId,
-                type = "EVENT",
-                title = title,
-                snippet = s.datetime.matched,
-                whenAt = DateTimeParser.toEpochMillis(s.datetime),
-                payload = s.addressLine.orEmpty(),
-                confidence = 0.45f,
             )
         }
 
@@ -85,14 +94,21 @@ object Classifier {
         s.tracking.take(1).forEach { t ->
             out += Finding(
                 shotId = shotId, type = "TRACKING", title = "Package $t",
-                payload = t, confidence = 0.5f,
+                payload = t, confidence = 0.6f,
             )
         }
         if (score(lower, recipeWords) >= 2) {
             out += Finding(shotId = shotId, type = "RECIPE", title = title, confidence = 0.6f)
         }
 
+        // Precision gate: floor, then best-per-type (one screenshot is one
+        // event, not five), then a hard cap.
         return out
+            .filter { it.confidence >= CONFIDENCE_FLOOR }
+            .groupBy { it.type }
+            .map { (_, group) -> group.maxBy { it.confidence } }
+            .sortedByDescending { it.confidence }
+            .take(MAX_FINDINGS_PER_SHOT)
     }
 
     private fun score(lower: String, words: List<String>): Int =

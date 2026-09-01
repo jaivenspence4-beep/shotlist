@@ -74,7 +74,16 @@ class OcrIngestWorker(
     private suspend fun ocr(uri: Uri): String {
         val image = InputImage.fromFilePath(applicationContext, uri)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        return recognizer.process(image).await().text
+        val result = recognizer.process(image).await()
+
+        // Every screenshot carries the status bar — clock, date, battery — and
+        // its "10:34 Mon, Aug 31" reads as an event date, which flooded real
+        // inboxes with garbage. Drop any text block living in the top sliver
+        // of the image instead of trying to out-regex the clock.
+        val cutoff = image.height * 0.05f
+        return result.textBlocks
+            .filter { block -> (block.boundingBox?.bottom ?: Int.MAX_VALUE) > cutoff }
+            .joinToString("\n") { it.text }
     }
 }
 
