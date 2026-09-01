@@ -76,7 +76,7 @@ abstract class ShotlistDb : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE VIRTUAL TABLE IF NOT EXISTS `shots_fts` USING FTS4(" +
-                        "`ocrText` TEXT, content=`shots`, tokenize=unicode61)"
+                        "`ocrText` TEXT NOT NULL, tokenize=unicode61, content=`shots`)"
                 )
                 db.execSQL("INSERT INTO `shots_fts`(`shots_fts`) VALUES('rebuild')")
             }
