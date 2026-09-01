@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -348,7 +349,7 @@ private fun HeroCard(
         Spacer(Modifier.height(8.dp))
         Text(
             if (actionCount == 0) {
-                "When onboarding scans your screenshot graveyard, useful events and deadlines appear here."
+                "Snap it and forget it. If there’s a date, code, or plan hiding inside, it lands here."
             } else {
                 "Shotlist found $actionCount useful action${if (actionCount == 1) "" else "s"} hiding in the graveyard."
             },
@@ -502,7 +503,9 @@ private fun ModulePlaceholder(
     GlassPanel(
         hazeState = hazeState,
         cornerRadius = 38.dp,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentHeight(align = Alignment.Top),
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(18.dp))
@@ -560,7 +563,7 @@ private fun GlassNavBar(
                         }
                         .background(pillColor, RoundedCornerShape(24.dp))
                         .clickable { onSelected(index) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                        .padding(horizontal = 4.dp, vertical = 12.dp),
                 ) {
                     Icon(
                         tab.icon,
@@ -570,7 +573,13 @@ private fun GlassNavBar(
                     AnimatedVisibility(visible = isSelected, enter = fadeIn(), exit = fadeOut()) {
                         Row {
                             Spacer(Modifier.width(6.dp))
-                            Text(tab.label, fontWeight = FontWeight.Bold)
+                            Text(
+                                tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
                         }
                     }
                 }
