@@ -9,10 +9,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
-        Shot::class, Finding::class,
+        Shot::class, Finding::class, ShotFts::class,
         CycleEntry::class, Habit::class, HabitTick::class, Scan::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class ShotlistDb : RoomDatabase() {
@@ -66,6 +66,22 @@ abstract class ShotlistDb : RoomDatabase() {
             }
         }
 
+        /**
+         * External-content FTS does not copy historical rows merely because its
+         * virtual table exists. The rebuild command deterministically indexes
+         * every already-processed screenshot; Room recreates sync triggers after
+         * migrations complete.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS `shots_fts` USING FTS4(" +
+                        "`ocrText` TEXT, content=`shots`, tokenize=unicode61)"
+                )
+                db.execSQL("INSERT INTO `shots_fts`(`shots_fts`) VALUES('rebuild')")
+            }
+        }
+
         fun get(context: Context): ShotlistDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -73,7 +89,7 @@ abstract class ShotlistDb : RoomDatabase() {
                     ShotlistDb::class.java,
                     "shotlist.db",
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

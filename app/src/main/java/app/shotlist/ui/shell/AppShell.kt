@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.WifiPassword
@@ -116,6 +117,7 @@ import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.scan.ScanScreen
 import app.shotlist.ui.share.ShareCardGenerator
 import app.shotlist.ui.theme.OrbStyle
@@ -219,6 +221,7 @@ private fun AppShellContent(
     val vaultedFindings by db.findings().vaulted().collectAsState(initial = emptyList())
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
+    var recallOpen by rememberSaveable { mutableStateOf(false) }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
     var autoScanEnabled by rememberSaveable {
@@ -283,6 +286,7 @@ private fun AppShellContent(
         findings.map { it.toShotlistAction() }
     }
     LaunchedEffect(deepLinkSerial) {
+        if (deepLinkSerial > 0) recallOpen = false
         selected = when (requestedTab) {
             "inbox" -> Tab.Inbox.ordinal
             "scan" -> Tab.Scan.ordinal
@@ -392,15 +396,45 @@ private fun AppShellContent(
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 14.dp),
         ) {
-            TopGlassBar(hazeState = hazeState, dailyStreak = dailyStreak)
+            TopGlassBar(
+                hazeState = hazeState,
+                dailyStreak = dailyStreak,
+                recallOpen = recallOpen,
+                onRecall = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    recallOpen = true
+                },
+            )
             Spacer(Modifier.height(16.dp))
-            AnimatedContent(
+            if (recallOpen) {
+                RecallScreen(
+                    hazeState = hazeState,
+                    vaultUnlocked = vaultUnlocked,
+                    onClose = { recallOpen = false },
+                    onFindingAction = { finding ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val action = finding.toShotlistAction()
+                        if (finding.vaulted && !vaultUnlocked) {
+                            pendingVaultAction = action
+                            biometricPrompt?.authenticate(vaultPromptInfo)
+                                ?: run {
+                                    pendingVaultAction = null
+                                    successMessage = "Vault unlock is unavailable"
+                                }
+                        } else {
+                            performAction(action)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                AnimatedContent(
                 targetState = Tab.entries[selected],
                 transitionSpec = { fadeIn() + scaleIn(initialScale = 0.98f) togetherWith fadeOut() + scaleOut(targetScale = 0.98f) },
                 label = "tab-content",
                 modifier = Modifier.weight(1f),
-            ) { tab ->
-                when (tab) {
+                ) { tab ->
+                    when (tab) {
                     Tab.Inbox -> InboxScreen(
                         actions = actions,
                         focusFindingId = deepLinkFindingId,
@@ -536,12 +570,14 @@ private fun AppShellContent(
                             }
                         },
                     )
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))
             GlassNavBar(
                 selected = selected,
                 onSelected = {
+                    recallOpen = false
                     if (selected != it) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selected = it
@@ -578,6 +614,8 @@ private fun AppShellContent(
 private fun TopGlassBar(
     hazeState: dev.chrisbanes.haze.HazeState,
     dailyStreak: Int,
+    recallOpen: Boolean,
+    onRecall: () -> Unit,
 ) {
     GlassPanel(
         hazeState = hazeState,
@@ -605,6 +643,37 @@ private fun TopGlassBar(
                     .background(Color(0xFFFFBE63).copy(alpha = 0.14f), RoundedCornerShape(999.dp))
                     .padding(horizontal = 9.dp, vertical = 5.dp),
             )
+        }
+        if (!recallOpen) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
+                    .clickable(onClick = onRecall)
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Search every screenshot",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "RECALL",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }

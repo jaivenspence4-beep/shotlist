@@ -26,6 +26,24 @@ interface ShotDao {
     )
     fun search(q: String): Flow<List<Shot>>
 
+    @Query(
+        "SELECT shots.id AS shotId, shots.uri AS uri, shots.takenAt AS takenAt, " +
+            "snippet(shots_fts, '[', ']', ' … ', 0, 22) AS excerpt, " +
+            "findings.id AS findingId, findings.type AS findingType, " +
+            "findings.title AS findingTitle, findings.snippet AS findingSnippet, " +
+            "findings.whenAt AS findingWhenAt, findings.amountCents AS findingAmountCents, " +
+            "findings.payload AS findingPayload, findings.confidence AS findingConfidence, " +
+            "findings.state AS findingState, findings.vaulted AS findingVaulted, " +
+            "findings.createdAt AS findingCreatedAt " +
+            "FROM shots_fts JOIN shots ON shots_fts.rowid = shots.id " +
+            "LEFT JOIN findings ON findings.id = (" +
+            "SELECT best.id FROM findings AS best WHERE best.shotId = shots.id " +
+            "AND best.state != 'DISMISSED' ORDER BY best.vaulted DESC, best.confidence DESC LIMIT 1" +
+            ") WHERE shots_fts MATCH :matchQuery " +
+            "ORDER BY shots.takenAt DESC LIMIT 40"
+    )
+    fun recall(matchQuery: String): Flow<List<RecallHit>>
+
     /** After a suggestion purge, shots with nothing left re-enter the pipeline. */
     @Query("DELETE FROM shots WHERE id NOT IN (SELECT shotId FROM findings)")
     suspend fun purgeOrphans()
