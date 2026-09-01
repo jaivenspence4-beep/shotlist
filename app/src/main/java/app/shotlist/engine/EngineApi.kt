@@ -10,6 +10,33 @@ object EngineApi {
     private var observer: MediaObserver? = null
 
     /**
+     * Call once at app start. When the classifier version bumps, suggestions
+     * made by the older brain are purged and their shots re-scanned, so a fix
+     * for junk findings actually cleans the user's inbox instead of only
+     * improving future screenshots.
+     */
+    fun ensureFreshClassification(context: Context) {
+        val app = context.applicationContext
+        val prefs = app.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
+        if (prefs.getInt("classifier_version", 0) >= Classifier.VERSION) return
+        Thread {
+            kotlinx.coroutines.runBlocking {
+                val db = app.shotlist.data.ShotlistDb.get(app)
+                db.findings().purgeSuggested()
+                db.shots().purgeOrphans()
+            }
+            prefs.edit().putInt("classifier_version", Classifier.VERSION).apply()
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                app, android.Manifest.permission.READ_MEDIA_IMAGES,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    app, android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (granted) backfill(app, limit = 100)
+        }.start()
+    }
+
+    /**
      * Begin watching for new screenshots. Idempotent. Call after permission.
      * Also schedules the periodic sweep (survives process death, which the
      * live observer does not) and runs an immediate catch-up sweep.

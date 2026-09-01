@@ -95,4 +95,52 @@ class ExtractorClassifierTest {
         val findings = Classifier.classify(1L, text, Extractor.extract(text))
         assertEquals(1, findings.count { it.type == "CODE" })
     }
+
+    // ---- Round-2 regressions: exact false positives from the S26 field test ----
+
+    @Test
+    fun `social profile with Follow and a date is not an event`() {
+        val text = "7 Follow\nAug 12 00:48\nLive replay"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "EVENT" || it.type == "DEADLINE" })
+    }
+
+    @Test
+    fun `chat timestamp today is not an event without strong anchors`() {
+        val text = "EONON\ntoday 00:49\nok sounds good"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.whenAt != null })
+    }
+
+    @Test
+    fun `masked password fields do not become wifi cards`() {
+        val text = "Sign in\nNetwork: CoffeeShop5G\nPassword: ••••••••"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "WIFI" })
+    }
+
+    @Test
+    fun `a search url with one shop word is not a product`() {
+        val text = "google.com/search?q=deals\n$49.99 order today"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "PRODUCT" })
+    }
+
+    @Test
+    fun `titles are never urls or ui fragments`() {
+        val text = "% zillow.com/homedet\nOpen house Sep 14 2:00 PM\nRSVP for a tour\n123 Harbor Blvd"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        val event = findings.firstOrNull { it.type == "EVENT" }
+        if (event != null) {
+            assertTrue("bad title: ${event.title}", !event.title.contains("zillow.com"))
+        }
+    }
+
+    @Test
+    fun `snippets read like sentences not raw matches`() {
+        val s = Extractor.extract(flyer)
+        val event = Classifier.classify(1L, flyer, s).first { it.type == "EVENT" }
+        assertTrue("snippet was: ${event.snippet}",
+            event.snippet.contains("Sep") && event.snippet.contains("Harbor"))
+    }
 }

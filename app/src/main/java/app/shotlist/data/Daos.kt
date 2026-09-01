@@ -25,6 +25,10 @@ interface ShotDao {
             "ORDER BY takenAt DESC LIMIT 100"
     )
     fun search(q: String): Flow<List<Shot>>
+
+    /** After a suggestion purge, shots with nothing left re-enter the pipeline. */
+    @Query("DELETE FROM shots WHERE id NOT IN (SELECT shotId FROM findings)")
+    suspend fun purgeOrphans()
 }
 
 @Dao
@@ -46,4 +50,17 @@ interface FindingDao {
 
     @Query("SELECT * FROM findings WHERE type IN (:types) ORDER BY createdAt DESC LIMIT 200")
     fun byTypes(types: List<String>): Flow<List<Finding>>
+
+    /** Cross-shot dedupe: the same flyer screenshotted twice is one finding. */
+    @Query(
+        "SELECT COUNT(*) FROM findings WHERE type = :type AND " +
+            "(title = :title OR (payload != '' AND payload = :payload)) AND " +
+            "(whenAt IS :whenAt OR (whenAt IS NOT NULL AND :whenAt IS NOT NULL AND " +
+            "ABS(whenAt - :whenAt) < 3600000))"
+    )
+    suspend fun duplicates(type: String, title: String, payload: String, whenAt: Long?): Int
+
+    /** Engine upgraded: stored suggestions were made by an older, dumber brain. */
+    @Query("DELETE FROM findings WHERE state = 'SUGGESTED'")
+    suspend fun purgeSuggested()
 }

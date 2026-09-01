@@ -47,7 +47,11 @@ class OcrIngestWorker(
         }
 
         val signals = Extractor.extract(text)
-        val findings = Classifier.classify(shotId, text, signals)
+        // Cross-shot dedupe: people screenshot the same page repeatedly — the
+        // S26 field test had one Zillow listing minted four times.
+        val findings = Classifier.classify(shotId, text, signals).filter { f ->
+            db.findings().duplicates(f.type, f.title, f.payload, f.whenAt) == 0
+        }
         db.findings().insertAll(findings)
         db.shots().markProcessed(
             id = shotId,

@@ -15,22 +15,31 @@ import androidx.compose.ui.platform.LocalContext
 // Dark-first liquid-glass base palette. Codex owns the full design system (t4);
 // these are the scaffold defaults it will build on.
 private val GlassDark = darkColorScheme(
-    primary = Color(0xFF8FB5FF),
-    onPrimary = Color(0xFF06122B),
-    secondary = Color(0xFFA6F4E6),
-    tertiary = Color(0xFFE7B8FF),
-    background = Color(0xFF0B0D12),
-    surface = Color(0xFF111522),
-    surfaceVariant = Color(0xFF22283A),
-    onBackground = Color(0xFFE6EAF2),
-    onSurface = Color(0xFFE6EAF2),
+    primary = Color(0xFFA8B8FF),
+    onPrimary = Color(0xFF09122E),
+    primaryContainer = Color(0xFF344A86),
+    onPrimaryContainer = Color(0xFFF4F6FF),
+    secondary = Color(0xFF70F0D0),
+    onSecondary = Color(0xFF00261F),
+    secondaryContainer = Color(0xFF174C43),
+    onSecondaryContainer = Color(0xFFD6FFF4),
+    tertiary = Color(0xFFFF79C9),
+    onTertiary = Color(0xFF34001F),
+    tertiaryContainer = Color(0xFF6A2450),
+    onTertiaryContainer = Color(0xFFFFE8F5),
+    background = Color(0xFF090B18),
+    surface = Color(0xFF12172A),
+    surfaceVariant = Color(0xFF252B43),
+    onBackground = Color(0xFFF4F5FF),
+    onSurface = Color(0xFFF4F5FF),
+    outline = Color(0xFF8E96B3),
 )
 
 private val GlassLight = lightColorScheme(
-    primary = Color(0xFF2F5FD0),
-    secondary = Color(0xFF1E8C77),
-    tertiary = Color(0xFF8A35C9),
-    background = Color(0xFFF4F6FB),
+    primary = Color(0xFF405DC4),
+    secondary = Color(0xFF007D68),
+    tertiary = Color(0xFFA62978),
+    background = Color(0xFFF5F5FF),
     surface = Color(0xFFFFFFFF),
 )
 
