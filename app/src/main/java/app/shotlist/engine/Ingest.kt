@@ -101,6 +101,36 @@ object IngestWorker {
     const val KEY_URI = "uri"
     const val KEY_TAKEN_AT = "takenAt"
 
+    /**
+     * Share-sheet path. The grant on a shared uri can expire before WorkManager
+     * runs, so the image is copied into app storage first (off the main thread),
+     * then queued under a stable negative pseudo-id — never colliding with real
+     * MediaStore ids, and still deduped by the unique mediaId index.
+     */
+    fun enqueueShared(context: Context, uri: Uri) {
+        val app = context.applicationContext
+        Thread {
+            runCatching {
+                val dir = java.io.File(app.filesDir, "shared").apply { mkdirs() }
+                val file = java.io.File(dir, "share-${System.currentTimeMillis()}.img")
+                app.contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { input.copyTo(it) }
+                } ?: return@runCatching
+                val pseudoId = -(file.name.hashCode().toLong().let {
+                    if (it == Long.MIN_VALUE) 1L else kotlin.math.abs(it)
+                })
+                enqueue(
+                    app,
+                    ScreenshotRow(
+                        mediaId = pseudoId,
+                        uri = Uri.fromFile(file),
+                        takenAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }.start()
+    }
+
     fun enqueue(context: Context, row: ScreenshotRow) {
         val req = OneTimeWorkRequestBuilder<OcrIngestWorker>()
             .setInputData(
