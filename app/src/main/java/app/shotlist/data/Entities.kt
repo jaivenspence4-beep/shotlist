@@ -35,5 +35,7 @@ data class Finding(
     val confidence: Float,
     /** SUGGESTED → ACCEPTED / SNOOZED / DISMISSED */
     val state: String = "SUGGESTED",
+    /** Vaulted findings render masked and require biometric to reveal. */
+    val vaulted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
 )

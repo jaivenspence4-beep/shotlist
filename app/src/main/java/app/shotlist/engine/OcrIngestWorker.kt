@@ -41,7 +41,10 @@ class OcrIngestWorker(
         )
         if (shotId <= 0) return Result.success() // conflict: another worker got it
 
-        val text = runCatching { ocr(Uri.parse(uriStr)) }.getOrElse { return Result.retry() }
+        val text = runCatching { ocr(Uri.parse(uriStr)) }.getOrElse { err ->
+            app.shotlist.diag.Diag.log("ocr", "failed for mediaId=$mediaId, will retry", err)
+            return Result.retry()
+        }
 
         val signals = Extractor.extract(text)
         val findings = Classifier.classify(shotId, text, signals)
