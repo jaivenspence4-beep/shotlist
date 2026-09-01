@@ -111,6 +111,7 @@ import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
 import app.shotlist.data.Finding
+import app.shotlist.data.Shot
 import app.shotlist.data.ShotlistDb
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
@@ -118,6 +119,7 @@ import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
@@ -226,6 +228,8 @@ private fun AppShellContent(
     var recallOpen by rememberSaveable { mutableStateOf(false) }
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailFinding by remember { mutableStateOf<Finding?>(null) }
+    var detailShot by remember { mutableStateOf<Shot?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
     var autoScanEnabled by rememberSaveable {
         mutableStateOf(prefs.getBoolean("auto_scan", true))
@@ -288,6 +292,9 @@ private fun AppShellContent(
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
     }
+    LaunchedEffect(detailFinding?.shotId) {
+        detailShot = detailFinding?.let { db.shots().byId(it.shotId) }
+    }
     LaunchedEffect(deepLinkSerial) {
         if (deepLinkSerial > 0) {
             recallOpen = false
@@ -299,6 +306,10 @@ private fun AppShellContent(
             "track" -> Tab.Track.ordinal
             "you" -> Tab.You.ordinal
             else -> if (deepLinkFindingId != null) Tab.Inbox.ordinal else selected
+        }
+        if (deepLinkFindingId != null) {
+            detailShot = null
+            detailFinding = db.findings().byId(deepLinkFindingId)
         }
     }
     val vaultedFindingIds = remember(vaultedFindings) {
@@ -328,6 +339,18 @@ private fun AppShellContent(
         }
     }
 
+    fun showFindingDetail(finding: Finding) {
+        detailShot = null
+        detailFinding = finding
+    }
+
+    fun loadFindingDetail(action: ShotlistAction) {
+        val findingId = action.findingId ?: return
+        scope.launch {
+            db.findings().byId(findingId)?.let(::showFindingDetail)
+        }
+    }
+
     fun performAction(action: ShotlistAction) {
         successMessage = "Done — nice catch"
         when (action.kind) {
@@ -353,6 +376,28 @@ private fun AppShellContent(
                 setState(action, "ACCEPTED")
             }
             ActionKind.Product, ActionKind.Recipe, ActionKind.Noise -> setState(action, "ACCEPTED")
+        }
+    }
+
+    fun requestPrimaryAction(action: ShotlistAction) {
+        val shouldAskNotifications = Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED &&
+            !prefs.getBoolean("notifications_asked", false)
+        if (shouldAskNotifications) {
+            pendingNotificationAction = action
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
+            pendingVaultAction = action
+            biometricPrompt?.authenticate(vaultPromptInfo)
+                ?: run {
+                    pendingVaultAction = null
+                    successMessage = "Vault unlock is unavailable"
+                }
+        } else {
+            performAction(action)
         }
     }
 
@@ -388,7 +433,7 @@ private fun AppShellContent(
         }
     }
 
-    BackHandler(enabled = recallOpen || shatterOpen) {
+    BackHandler(enabled = detailFinding == null && (recallOpen || shatterOpen)) {
         recallOpen = false
         shatterOpen = false
     }
@@ -430,18 +475,8 @@ private fun AppShellContent(
                     vaultUnlocked = vaultUnlocked,
                     onClose = { recallOpen = false },
                     onFindingAction = { finding ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val action = finding.toShotlistAction()
-                        if (finding.vaulted && !vaultUnlocked) {
-                            pendingVaultAction = action
-                            biometricPrompt?.authenticate(vaultPromptInfo)
-                                ?: run {
-                                    pendingVaultAction = null
-                                    successMessage = "Vault unlock is unavailable"
-                                }
-                        } else {
-                            performAction(action)
-                        }
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showFindingDetail(finding)
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -487,31 +522,9 @@ private fun AppShellContent(
                                 ),
                             )
                         },
-                        onShare = { action ->
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            context.startActivity(ShareCardGenerator.findingIntent(context, action))
-                        },
-                        onAccept = { action ->
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            val shouldAskNotifications = Build.VERSION.SDK_INT >= 33 &&
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.POST_NOTIFICATIONS,
-                                ) != PackageManager.PERMISSION_GRANTED &&
-                                !prefs.getBoolean("notifications_asked", false)
-                            if (shouldAskNotifications) {
-                                pendingNotificationAction = action
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
-                                pendingVaultAction = action
-                                biometricPrompt?.authenticate(vaultPromptInfo)
-                                    ?: run {
-                                        pendingVaultAction = null
-                                        successMessage = "Vault unlock is unavailable"
-                                    }
-                            } else {
-                                performAction(action)
-                            }
+                        onOpenDetail = { action ->
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            loadFindingDetail(action)
                         },
                         onVault = { action ->
                             action.findingId?.let { id ->
@@ -631,6 +644,47 @@ private fun AppShellContent(
             }
         }
     }
+
+    detailFinding?.let { finding ->
+        val action = finding.toShotlistAction()
+        FindingDetailSheet(
+            finding = finding,
+            shot = detailShot,
+            action = action,
+            vaultUnlocked = vaultUnlocked,
+            hazeState = hazeState,
+            onDismissRequest = {
+                detailFinding = null
+                detailShot = null
+            },
+            onUnlock = {
+                biometricPrompt?.authenticate(vaultPromptInfo)
+                    ?: run { successMessage = "Vault unlock is unavailable" }
+            },
+            onPrimaryAction = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                requestPrimaryAction(action)
+            },
+            onShare = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                context.startActivity(ShareCardGenerator.findingIntent(context, action))
+            },
+            onVaultChanged = { vaulted ->
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                scope.launch { db.findings().setVaulted(finding.id, vaulted) }
+                detailFinding = finding.copy(vaulted = vaulted)
+                if (vaulted) vaultUnlocked = false
+                successMessage = if (vaulted) "Locked in your vault" else "Moved back to your inbox"
+            },
+            onDismissFinding = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                setState(action, "DISMISSED")
+                detailFinding = null
+                detailShot = null
+                successMessage = "Cleared out"
+            },
+        )
+    }
 }
 
 @Composable
@@ -715,8 +769,7 @@ private fun InboxScreen(
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
     onShareWrapped: () -> Unit,
-    onShare: (ShotlistAction) -> Unit,
-    onAccept: (ShotlistAction) -> Unit,
+    onOpenDetail: (ShotlistAction) -> Unit,
     onVault: (ShotlistAction) -> Unit,
     onSnooze: (ShotlistAction) -> Unit,
     onDismiss: (ShotlistAction) -> Unit,
@@ -780,9 +833,8 @@ private fun InboxScreen(
                     action = action,
                     locked = action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked,
                     hazeState = hazeState,
-                    onAccept = { onAccept(action) },
+                    onOpenDetail = { onOpenDetail(action) },
                     onVault = { onVault(action) },
-                    onShare = { onShare(action) },
                     onSnooze = { onSnooze(action) },
                     onDismiss = { onDismiss(action) },
                 )
@@ -1134,9 +1186,8 @@ private fun ActionCard(
     action: ShotlistAction,
     locked: Boolean,
     hazeState: dev.chrisbanes.haze.HazeState,
-    onAccept: () -> Unit,
+    onOpenDetail: () -> Unit,
     onVault: () -> Unit,
-    onShare: () -> Unit,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1182,7 +1233,7 @@ private fun ActionCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = {},
+                    onClick = onOpenDetail,
                     onLongClick = onVault,
                 ),
         ) {
@@ -1222,31 +1273,14 @@ private fun ActionCard(
                         color = accent.copy(alpha = 0.92f),
                     )
                     Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = onAccept,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = accent.copy(alpha = 0.20f),
-                                contentColor = accent,
-                            ),
-                        ) {
-                            Text(if (locked) "Unlock" else primaryCta(action.kind), fontSize = 14.sp)
-                        }
-                        if (!locked) {
-                            FilledTonalButton(
-                                onClick = onShare,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color.White.copy(alpha = 0.08f),
-                                    contentColor = MaterialTheme.colorScheme.onSurface,
-                                ),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Share,
-                                    contentDescription = "Share card",
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
+                    FilledTonalButton(
+                        onClick = onOpenDetail,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = accent.copy(alpha = 0.20f),
+                            contentColor = accent,
+                        ),
+                    ) {
+                        Text(if (locked) "View private details" else "View details", fontSize = 14.sp)
                     }
                 }
             }
@@ -1298,18 +1332,6 @@ private fun kindLabel(kind: ActionKind): String = when (kind) {
     ActionKind.Contact -> "Contact"
     ActionKind.Recipe -> "Recipe"
     ActionKind.Noise -> "Saved"
-}
-
-private fun primaryCta(kind: ActionKind): String = when (kind) {
-    ActionKind.Event -> "Add"
-    ActionKind.Deadline -> "Remind"
-    ActionKind.Product -> "Track"
-    ActionKind.Place -> "Open"
-    ActionKind.Code -> "Copy"
-    ActionKind.Link -> "Open"
-    ActionKind.Contact -> "Add"
-    ActionKind.Recipe -> "List"
-    ActionKind.Noise -> "Archive"
 }
 
 @Composable

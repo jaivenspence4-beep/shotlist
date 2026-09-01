@@ -305,9 +305,9 @@ private fun RecallResultCard(
         FilledTonalButton(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
             Text(
                 when {
-                    locked -> "Unlock"
+                    locked -> "View private details"
                     action == null -> "Open screenshot"
-                    else -> recallCta(action.kind)
+                    else -> "View details"
                 },
                 fontWeight = FontWeight.Bold,
             )
@@ -369,18 +369,6 @@ private fun recallAccent(kind: ActionKind): Color = when (kind) {
     ActionKind.Contact -> Color(0xFF7EF5D8)
     ActionKind.Recipe -> Color(0xFFFF9D72)
     ActionKind.Noise -> Color(0xFFB5BAD0)
-}
-
-private fun recallCta(kind: ActionKind): String = when (kind) {
-    ActionKind.Event -> "Add to Calendar"
-    ActionKind.Deadline -> "Set reminder"
-    ActionKind.Product -> "Save product"
-    ActionKind.Place -> "Open map"
-    ActionKind.Code -> "Copy"
-    ActionKind.Link -> "Open link"
-    ActionKind.Contact -> "Add contact"
-    ActionKind.Recipe -> "Save recipe"
-    ActionKind.Noise -> "Keep"
 }
 
 private fun openScreenshot(context: android.content.Context, rawUri: String) {

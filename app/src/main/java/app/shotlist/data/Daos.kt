@@ -18,6 +18,9 @@ interface ShotDao {
     @Query("SELECT * FROM shots WHERE mediaId = :mediaId LIMIT 1")
     suspend fun byMediaId(mediaId: Long): Shot?
 
+    @Query("SELECT * FROM shots WHERE id = :id LIMIT 1")
+    suspend fun byId(id: Long): Shot?
+
     @Query("SELECT COUNT(*) FROM shots")
     fun count(): Flow<Int>
 
@@ -97,6 +100,9 @@ interface FindingDao {
      *  deep-link to the real persisted finding. */
     @Insert
     suspend fun insertAll(findings: List<Finding>): List<Long>
+
+    @Query("SELECT * FROM findings WHERE id = :id LIMIT 1")
+    suspend fun byId(id: Long): Finding?
 
     @Query("SELECT * FROM findings WHERE state = 'SUGGESTED' ORDER BY createdAt DESC")
     fun inbox(): Flow<List<Finding>>
