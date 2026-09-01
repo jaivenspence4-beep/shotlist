@@ -154,6 +154,13 @@ object IngestWorker {
                     .build()
             )
             .build()
-        WorkManager.getInstance(context).enqueue(req)
+        // Single serial queue: the cross-shot dedupe check-then-insert is only
+        // race-free if ingest jobs never run concurrently. OCR of a backfill
+        // batch is fast enough that serialization costs seconds, not minutes.
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "shotlist-ingest",
+            androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,
+            req,
+        )
     }
 }

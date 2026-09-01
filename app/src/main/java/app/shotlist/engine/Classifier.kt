@@ -49,14 +49,22 @@ object Classifier {
     )
 
     // Lines that must never become card titles: URLs, emails, UI fragments.
+    // Domain tokens are rejected even without a trailing slash — OCR mangles
+    // "order.littlecaesars.com" into fragments that dodged the old pattern.
     private val junkTitle = Regex(
-        "(://|www\\.|@\\w+\\.|^\\W+$|^[%/|•·\\-_=+ ]|\\.\\w{2,4}/)",
+        "(://|www\\.|@\\w+\\.|^\\W+$|^[%/|•·\\-_=+ ]|\\.\\w{2,4}/|" +
+            "\\.(com|net|org|io|co|app|gov|edu|me|tv)\\b)",
         RegexOption.IGNORE_CASE,
     )
     private val uiNoiseTitles = setOf(
-        "done", "follow", "following", "subscribe", "like", "share", "next",
-        "back", "ok", "cancel", "menu", "home", "search",
+        "done", "follow", "following", "followers", "subscribe", "like", "likes",
+        "share", "views", "comments", "next", "back", "ok", "cancel", "menu",
+        "home", "search", "live", "reply",
     )
+
+    /** "7 Follow", "25 likes" — social counters are not headlines. */
+    private fun isSocialCounter(line: String): Boolean =
+        line.lowercase().replace(Regex("[^a-z ]"), "").trim() in uiNoiseTitles
 
     private val whenFormat = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a")
 
@@ -96,10 +104,13 @@ object Classifier {
             )
         }
 
-        // PRODUCT: one shop word + any dollar sign flagged Google-search URLs
-        // and "Done" buttons as products. Two anchors, a sane price, real title.
+        // PRODUCT: two anchors, sane price, real title — and link-heavy pages
+        // (search results, social feeds) need a third anchor, since they are
+        // where the surviving false products came from.
         val bestPrice = s.prices.filter { it in 99..10_000_00 }.maxOrNull()
-        if (bestPrice != null && score(lower, productWords) >= 2 && title != null) {
+        val productAnchors = score(lower, productWords)
+        val productBar = if (s.urls.size > 1) 3 else 2
+        if (bestPrice != null && productAnchors >= productBar && title != null) {
             out += Finding(
                 shotId = shotId,
                 type = "PRODUCT",
@@ -162,6 +173,7 @@ object Classifier {
                 line.length in 4..64 &&
                     line.any(Char::isLetter) &&
                     !junkTitle.containsMatchIn(line) &&
+                    !isSocialCounter(line) &&
                     line.lowercase().trim('!', '.', ' ') !in uiNoiseTitles &&
                     line.count(Char::isDigit) < line.length / 2
             }

@@ -27,12 +27,20 @@ object EngineApi {
                 db.shots().purgeOrphans()
             }
             prefs.edit().putInt("classifier_version", Classifier.VERSION).apply()
-            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-                appCtx, android.Manifest.permission.READ_MEDIA_IMAGES,
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    appCtx, android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            // Partial access (Android 14 "select photos") counts: those users
+            // were purged then never rescanned, leaving a permanently empty
+            // inbox — Codex's t29 review catch.
+            val permissions = buildList {
+                add(android.Manifest.permission.READ_MEDIA_IMAGES)
+                add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    add("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+                }
+            }
+            val granted = permissions.any {
+                androidx.core.content.ContextCompat.checkSelfPermission(appCtx, it) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
             if (granted) backfill(appCtx, limit = 100)
         }.start()
     }

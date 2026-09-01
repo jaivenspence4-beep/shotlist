@@ -136,6 +136,30 @@ class ExtractorClassifierTest {
         }
     }
 
+    // ---- Round-3 regressions: exact junk rows from the build-29 device DB ----
+
+    @Test
+    fun `social counter lines never become titles or findings`() {
+        val text = "7 Follow\nexpires Aug 30\nsale ends order checkout % off"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.title == "7 Follow" })
+    }
+
+    @Test
+    fun `mangled domain fragments are not titles`() {
+        val text = "o der.littlecaesars.com +\ndue 9/2 payment due"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.title.contains(".com") })
+    }
+
+    @Test
+    fun `link-heavy pages need a third product anchor`() {
+        val text = "25 tiktok.comview/prod\nhttps://a.co/x\nwww.shop.com/y\n" +
+            "$19.99 order · free shipping"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "PRODUCT" })
+    }
+
     @Test
     fun `snippets read like sentences not raw matches`() {
         val s = Extractor.extract(flyer)
