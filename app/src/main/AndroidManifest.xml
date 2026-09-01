@@ -68,6 +68,18 @@
             android:name=".actions.ShotlistReminderReceiver"
             android:exported="false" />
 
+        <!-- Rendered share cards leave via a scoped FileProvider — the only
+             sanctioned way a file exits the app, and only on a user's share tap. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="app.shotlist.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
+
         <!-- Home-screen widgets (Glance). Class names are the t34 contract:
              implement receivers exactly at these names. -->
         <receiver
