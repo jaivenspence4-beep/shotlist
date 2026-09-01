@@ -79,6 +79,9 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // You-tab vault lock
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

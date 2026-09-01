@@ -15,6 +15,12 @@
     <!-- WAKE_LOCK: WorkManager holds brief locks while OCR jobs run -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Scan module: in-app camera capture feeds the same local OCR pipeline -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <!-- The privacy claim, enforced structurally: no code path in this process —
          ours or any library's — can transmit anything, because the permission is
          stripped even if a dependency's manifest requests it. Calendar entries
