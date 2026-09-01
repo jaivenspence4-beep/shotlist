@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -101,6 +102,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.work.WorkManager
+import app.shotlist.MainActivity
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
@@ -134,6 +136,8 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun AppShell() {
     val context = LocalContext.current
+    val deepLinkFindingId = (context as? MainActivity)?.deepLinkFindingId
+    val deepLinkSerial = (context as? MainActivity)?.deepLinkSerial ?: 0
     val haptics = LocalHapticFeedback.current
     val prefs = remember(context) {
         context.getSharedPreferences("shotlist_onboarding", android.content.Context.MODE_PRIVATE)
@@ -166,6 +170,8 @@ fun AppShell() {
     }
     var vaultUnlocked by remember { mutableStateOf(false) }
     var pendingVaultAction by remember { mutableStateOf<ShotlistAction?>(null) }
+    var pendingNotificationAction by remember { mutableStateOf<ShotlistAction?>(null) }
+    var notificationPermissionResult by remember { mutableIntStateOf(0) }
     val activity = context as? FragmentActivity
     val biometricPrompt = remember(activity) {
         activity?.let {
@@ -210,6 +216,9 @@ fun AppShell() {
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
     }
+    LaunchedEffect(deepLinkSerial) {
+        if (deepLinkFindingId != null) selected = Tab.Inbox.ordinal
+    }
     val vaultedFindingIds = remember(vaultedFindings) {
         vaultedFindings.mapTo(mutableSetOf()) { it.id }
     }
@@ -223,6 +232,12 @@ fun AppShell() {
             successMessage = "Looking for the useful stuff"
         }
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        prefs.edit().putBoolean("notifications_asked", true).apply()
+        notificationPermissionResult += 1
+    }
 
     fun setState(action: ShotlistAction, state: String) {
         action.findingId ?: return
@@ -235,6 +250,7 @@ fun AppShell() {
         successMessage = "Done — nice catch"
         when (action.kind) {
             ActionKind.Event, ActionKind.Deadline -> {
+                ShotlistActions.scheduleEventReminders(context, action)
                 context.startActivity(ShotlistActions.calendarInsertIntent(action))
                 setState(action, "ACCEPTED")
             }
@@ -254,6 +270,24 @@ fun AppShell() {
         if (vaultUnlocked) {
             pendingVaultAction?.let(::performAction)
             pendingVaultAction = null
+        }
+    }
+
+    LaunchedEffect(notificationPermissionResult) {
+        if (notificationPermissionResult > 0) {
+            pendingNotificationAction?.let { action ->
+                if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
+                    pendingVaultAction = action
+                    biometricPrompt?.authenticate(vaultPromptInfo)
+                        ?: run {
+                            pendingVaultAction = null
+                            successMessage = "Vault unlock is unavailable"
+                        }
+                } else {
+                    performAction(action)
+                }
+            }
+            pendingNotificationAction = null
         }
     }
 
@@ -289,6 +323,8 @@ fun AppShell() {
                 when (tab) {
                     Tab.Inbox -> InboxScreen(
                         actions = actions,
+                        focusFindingId = deepLinkFindingId,
+                        focusRequestSerial = deepLinkSerial,
                         vaultedFindingIds = vaultedFindingIds,
                         vaultUnlocked = vaultUnlocked,
                         scannedCount = shotCount,
@@ -307,7 +343,16 @@ fun AppShell() {
                         },
                         onAccept = { action ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
+                            val shouldAskNotifications = Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) != PackageManager.PERMISSION_GRANTED &&
+                                !prefs.getBoolean("notifications_asked", false)
+                            if (shouldAskNotifications) {
+                                pendingNotificationAction = action
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
                                 pendingVaultAction = action
                                 biometricPrompt?.authenticate(vaultPromptInfo)
                                     ?: run {
@@ -462,6 +507,8 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
 @Composable
 private fun InboxScreen(
     actions: List<ShotlistAction>,
+    focusFindingId: Long?,
+    focusRequestSerial: Int,
     vaultedFindingIds: Set<Long>,
     vaultUnlocked: Boolean,
     scannedCount: Int,
@@ -473,7 +520,13 @@ private fun InboxScreen(
     onSnooze: (ShotlistAction) -> Unit,
     onDismiss: (ShotlistAction) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(focusRequestSerial, actions.size) {
+        val actionIndex = actions.indexOfFirst { it.findingId == focusFindingId }
+        if (actionIndex >= 0) listState.animateScrollToItem(actionIndex + 2)
+    }
     LazyColumn(
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(bottom = 10.dp),
         modifier = Modifier.fillMaxSize(),
