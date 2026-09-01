@@ -46,14 +46,20 @@ interface ShotDao {
     fun recall(matchQuery: String): Flow<List<RecallHit>>
 
     /**
-     * A candidate is safe only when no finding on the screenshot was ever
-     * accepted or vaulted, and every remaining meaning is dismissed/expired.
-     * App-private scan captures are excluded: Android's trash confirmation can
-     * only act on real MediaStore content URIs.
+     * A candidate needs positive evidence that it is stale: an exact OCR
+     * duplicate with a newer copy, an explicitly dismissed finding, or an
+     * expired event/deadline. IGNORED only means "no action extracted" and is
+     * never disposal evidence. Accepted/vaulted/live findings stay protected.
+     * App-private scan captures are excluded because Android's recoverable
+     * trash confirmation only acts on real MediaStore content URIs.
      */
     @Query(
         "SELECT shots.id AS shotId, shots.uri AS uri, shots.takenAt AS takenAt, " +
-            "CASE WHEN shots.status = 'IGNORED' THEN 'No useful text found' " +
+            "CASE WHEN EXISTS (SELECT 1 FROM shots AS newer WHERE newer.id != shots.id " +
+            "AND LENGTH(TRIM(shots.ocrText)) >= 12 AND TRIM(newer.ocrText) = TRIM(shots.ocrText) " +
+            "AND (newer.takenAt > shots.takenAt OR " +
+            "(newer.takenAt = shots.takenAt AND newer.id > shots.id))) " +
+            "THEN 'Exact duplicate — newer copy exists' " +
             "WHEN EXISTS (SELECT 1 FROM findings AS dismissed WHERE dismissed.shotId = shots.id " +
             "AND dismissed.state = 'DISMISSED') THEN 'Everything here was dismissed' " +
             "ELSE 'The plans here have expired' END AS reason " +
@@ -63,7 +69,10 @@ interface ShotDao {
             "AND NOT EXISTS (SELECT 1 FROM findings AS live WHERE live.shotId = shots.id " +
             "AND live.state != 'DISMISSED' AND NOT (" +
             "live.type IN ('EVENT', 'DEADLINE') AND live.whenAt IS NOT NULL AND live.whenAt < :now" +
-            ")) AND (shots.status = 'IGNORED' OR " +
+            ")) AND (EXISTS (SELECT 1 FROM shots AS newer WHERE newer.id != shots.id " +
+            "AND LENGTH(TRIM(shots.ocrText)) >= 12 AND TRIM(newer.ocrText) = TRIM(shots.ocrText) " +
+            "AND (newer.takenAt > shots.takenAt OR " +
+            "(newer.takenAt = shots.takenAt AND newer.id > shots.id))) OR " +
             "EXISTS (SELECT 1 FROM findings AS anyFinding WHERE anyFinding.shotId = shots.id)) " +
             "ORDER BY shots.takenAt DESC LIMIT 120"
     )
