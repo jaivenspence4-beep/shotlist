@@ -12,6 +12,8 @@ fun Finding.toShotlistAction(): ShotlistAction {
         "PRODUCT" -> ActionKind.Product
         "PLACE" -> ActionKind.Place
         "CODE", "WIFI", "TRACKING" -> ActionKind.Code
+        "URL" -> ActionKind.Link
+        "PHONE" -> ActionKind.Contact
         "RECIPE" -> ActionKind.Recipe
         else -> ActionKind.Noise
     }
@@ -30,5 +32,8 @@ fun Finding.toShotlistAction(): ShotlistAction {
         location = payload.takeIf { kind == ActionKind.Event || kind == ActionKind.Place },
         url = payload.takeIf { type == "URL" },
         code = payload.takeIf { kind == ActionKind.Code },
+        phone = payload.takeIf { type == "PHONE" && !it.contains("@") },
+        email = payload.takeIf { type == "PHONE" && it.contains("@") }
+            ?: snippet.split(" · ").firstOrNull { type == "PHONE" && it.contains("@") },
     )
 }

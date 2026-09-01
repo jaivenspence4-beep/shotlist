@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -274,6 +275,14 @@ fun AppShell() {
             }
             ActionKind.Place -> {
                 ShotlistActions.mapSearchIntent(action)?.let(context::startActivity)
+                setState(action, "ACCEPTED")
+            }
+            ActionKind.Link -> {
+                ShotlistActions.openUrlIntent(action)?.let(context::startActivity)
+                setState(action, "ACCEPTED")
+            }
+            ActionKind.Contact -> {
+                context.startActivity(ShotlistActions.contactInsertIntent(action))
                 setState(action, "ACCEPTED")
             }
             ActionKind.Product, ActionKind.Recipe, ActionKind.Noise -> setState(action, "ACCEPTED")
@@ -951,6 +960,8 @@ private fun KindIcon(kind: ActionKind, accent: Color) {
         ActionKind.Product -> Icons.Outlined.ShoppingBag
         ActionKind.Place -> Icons.Outlined.Map
         ActionKind.Code -> Icons.Outlined.WifiPassword
+        ActionKind.Link -> Icons.Outlined.Link
+        ActionKind.Contact -> Icons.Outlined.Person
         ActionKind.Recipe -> Icons.Outlined.AutoAwesome
         ActionKind.Noise -> Icons.Outlined.Inbox
     }
@@ -970,6 +981,8 @@ private fun actionColor(kind: ActionKind): Color = when (kind) {
     ActionKind.Product -> Color(0xFFFF79C9)
     ActionKind.Place -> Color(0xFF70F0D0)
     ActionKind.Code -> Color(0xFF58D8FF)
+    ActionKind.Link -> Color(0xFFAAB8FF)
+    ActionKind.Contact -> Color(0xFF7EF5D8)
     ActionKind.Recipe -> Color(0xFFFF9D72)
     ActionKind.Noise -> Color(0xFFB5BAD0)
 }
@@ -980,6 +993,8 @@ private fun kindLabel(kind: ActionKind): String = when (kind) {
     ActionKind.Product -> "Product"
     ActionKind.Place -> "Place"
     ActionKind.Code -> "Code"
+    ActionKind.Link -> "Link"
+    ActionKind.Contact -> "Contact"
     ActionKind.Recipe -> "Recipe"
     ActionKind.Noise -> "Saved"
 }
@@ -990,6 +1005,8 @@ private fun primaryCta(kind: ActionKind): String = when (kind) {
     ActionKind.Product -> "Track"
     ActionKind.Place -> "Open"
     ActionKind.Code -> "Copy"
+    ActionKind.Link -> "Open"
+    ActionKind.Contact -> "Add"
     ActionKind.Recipe -> "List"
     ActionKind.Noise -> "Archive"
 }

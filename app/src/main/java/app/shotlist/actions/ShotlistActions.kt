@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.CalendarContract
+import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
 import app.shotlist.MainActivity
 import app.shotlist.R
@@ -27,6 +28,8 @@ enum class ActionKind {
     Product,
     Place,
     Code,
+    Link,
+    Contact,
     Recipe,
     Noise,
 }
@@ -43,6 +46,8 @@ data class ShotlistAction(
     val location: String? = null,
     val url: String? = null,
     val code: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
 )
 
 object ShotlistActions {
@@ -82,6 +87,15 @@ object ShotlistActions {
     fun openUrlIntent(action: ShotlistAction): Intent? {
         val target = action.url ?: return null
         return Intent(Intent.ACTION_VIEW, Uri.parse(target))
+    }
+
+    fun contactInsertIntent(action: ShotlistAction): Intent = Intent(
+        Intent.ACTION_INSERT,
+        ContactsContract.Contacts.CONTENT_URI,
+    ).apply {
+        putExtra(ContactsContract.Intents.Insert.NAME, action.title)
+        action.phone?.let { putExtra(ContactsContract.Intents.Insert.PHONE, it) }
+        action.email?.let { putExtra(ContactsContract.Intents.Insert.EMAIL, it) }
     }
 
     fun mapSearchIntent(action: ShotlistAction): Intent? {

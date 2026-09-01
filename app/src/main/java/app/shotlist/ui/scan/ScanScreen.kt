@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.CalendarContract
+import android.provider.ContactsContract
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,6 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +88,8 @@ import app.shotlist.data.Shot
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.IngestWorker
 import app.shotlist.engine.ScreenshotRow
+import app.shotlist.engine.barcode.BarcodeDecoder
+import app.shotlist.engine.barcode.BarcodeResult
 import app.shotlist.ui.glass.GlassPanel
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -91,6 +97,7 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import dev.chrisbanes.haze.HazeState
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class CapturePhase {
     Ready,
@@ -129,6 +136,7 @@ fun ScanScreen(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     val db = remember(context) { ShotlistDb.get(context) }
     val allFindings by db.findings().byTypes(findingTypes).collectAsState(initial = emptyList())
     var cameraGranted by remember { mutableStateOf(hasCameraPermission(context)) }
@@ -139,6 +147,7 @@ fun ScanScreen(
     var resultShot by remember { mutableStateOf<Shot?>(null) }
     var documentPdfUri by remember { mutableStateOf<Uri?>(null) }
     var documentPageCount by remember { mutableStateOf(0) }
+    var barcodeResult by remember { mutableStateOf<BarcodeResult?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     val imageCapture = remember {
         ImageCapture.Builder()
@@ -304,6 +313,7 @@ fun ScanScreen(
                 mode = captureMode,
                 findings = resultFindings,
                 shot = resultShot,
+                barcodeResult = barcodeResult,
                 documentPdfUri = documentPdfUri,
                 documentPageCount = documentPageCount,
                 errorMessage = errorMessage,
@@ -311,12 +321,17 @@ fun ScanScreen(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     sharePdf(context, uri)
                 },
+                onBarcodeAction = { result ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    actOnBarcode(context, result)
+                },
                 onAgain = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     captureMediaId = null
                     resultShot = null
                     documentPdfUri = null
                     documentPageCount = 0
+                    barcodeResult = null
                     errorMessage = ""
                     phase = CapturePhase.Ready
                 },
@@ -351,6 +366,40 @@ fun ScanScreen(
                                     phase = CapturePhase.Error
                                 }
                         }
+                    } else if (selectedMode == ScanMode.QR) {
+                        captureBarcode(
+                            context = context,
+                            imageCapture = imageCapture,
+                            onDecoded = { mediaId, decoded ->
+                                scope.launch {
+                                    val now = System.currentTimeMillis()
+                                    val shot = Shot(
+                                        mediaId = mediaId,
+                                        uri = "",
+                                        takenAt = now,
+                                        ocrText = decoded.rawValue,
+                                        status = "PROCESSED",
+                                    )
+                                    val shotId = db.shots().insert(shot)
+                                    if (shotId > 0) {
+                                        db.findings().insertAll(listOf(decoded.toFinding(shotId)))
+                                        db.scans().insert(Scan(shotId = shotId, mode = ScanMode.QR.name))
+                                        resultShot = shot.copy(id = shotId)
+                                    }
+                                    barcodeResult = decoded
+                                    phase = CapturePhase.Result
+                                }
+                            },
+                            onEmpty = {
+                                errorMessage = "No code found. Move closer and keep it inside the corners."
+                                phase = CapturePhase.Error
+                            },
+                            onError = {
+                                errorMessage = "Couldn’t read that code. Hold steady and try again."
+                                phase = CapturePhase.Error
+                            },
+                        )
+                        phase = CapturePhase.Reading
                     } else {
                         captureToPipeline(
                             context = context,
@@ -489,6 +538,39 @@ private fun captureToPipeline(
     )
 }
 
+private fun captureBarcode(
+    context: Context,
+    imageCapture: ImageCapture,
+    onDecoded: (Long, BarcodeResult) -> Unit,
+    onEmpty: () -> Unit,
+    onError: () -> Unit,
+) {
+    val mediaId = -System.currentTimeMillis()
+    val directory = File(context.cacheDir, "barcode").apply { mkdirs() }
+    val file = File(directory, "code-${-mediaId}.jpg")
+    val options = ImageCapture.OutputFileOptions.Builder(file).build()
+    imageCapture.takePicture(
+        options,
+        ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                BarcodeDecoder.decode(
+                    context = context,
+                    file = file,
+                    onSuccess = { onDecoded(mediaId, it) },
+                    onEmpty = onEmpty,
+                    onFailure = onError,
+                )
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                file.delete()
+                onError()
+            }
+        },
+    )
+}
+
 @Composable
 private fun CameraPermissionCard(
     hazeState: HazeState,
@@ -607,10 +689,12 @@ private fun ResultSheet(
     mode: ScanMode,
     findings: List<Finding>,
     shot: Shot?,
+    barcodeResult: BarcodeResult?,
     documentPdfUri: Uri?,
     documentPageCount: Int,
     errorMessage: String,
     onShareDocument: (Uri) -> Unit,
+    onBarcodeAction: (BarcodeResult) -> Unit,
     onAgain: () -> Unit,
 ) {
     val success = phase == CapturePhase.Result
@@ -640,7 +724,35 @@ private fun ResultSheet(
                 Icon(Icons.Outlined.Refresh, contentDescription = "Scan another", tint = accent)
             }
         }
-        if (success && mode == ScanMode.DOCS && documentPdfUri != null) {
+        if (success && mode == ScanMode.QR && barcodeResult != null) {
+            Text(
+                barcodeResult.title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+            )
+            Text(
+                barcodeResult.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (barcodeResult.vaulted) "Saved behind biometric lock" else "Saved to your Inbox",
+                color = accent,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            barcodeResult.cta?.let { label ->
+                Spacer(Modifier.height(10.dp))
+                FilledTonalButton(
+                    onClick = { onBarcodeAction(barcodeResult) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(label, fontWeight = FontWeight.Bold)
+                }
+            }
+        } else if (success && mode == ScanMode.DOCS && documentPdfUri != null) {
             Text(
                 "$documentPageCount ${if (documentPageCount == 1) "page" else "pages"} · cropped, cleaned, PDF-ready",
                 style = MaterialTheme.typography.bodyMedium,
@@ -718,6 +830,42 @@ private fun sharePdf(context: Context, uri: Uri) {
     context.startActivity(Intent.createChooser(send, "Share clean PDF"))
 }
 
+private fun actOnBarcode(context: Context, result: BarcodeResult) {
+    val intent = when (result.type) {
+        "URL" -> Intent(Intent.ACTION_VIEW, Uri.parse(result.payload))
+        "PHONE" -> Intent(Intent.ACTION_INSERT, ContactsContract.Contacts.CONTENT_URI).apply {
+            putExtra(ContactsContract.Intents.Insert.NAME, result.title)
+            result.phone?.let { putExtra(ContactsContract.Intents.Insert.PHONE, it) }
+            result.email?.let { putExtra(ContactsContract.Intents.Insert.EMAIL, it) }
+        }
+        "EVENT" -> Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI).apply {
+            putExtra(CalendarContract.Events.TITLE, result.title)
+            putExtra(CalendarContract.Events.DESCRIPTION, result.detail)
+            putExtra(CalendarContract.Events.EVENT_LOCATION, result.payload)
+            result.whenAt?.let {
+                putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it)
+                putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it + 60 * 60 * 1000)
+            }
+        }
+        "PLACE" -> Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(result.payload)}"))
+        "PRODUCT" -> Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/search?q=${Uri.encode(result.payload)}"),
+        )
+        "CODE" -> {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Shotlist code", result.payload))
+            Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+            null
+        }
+        else -> null
+    }
+    if (intent != null) {
+        runCatching { context.startActivity(intent) }
+            .onFailure { Toast.makeText(context, "No app can open that yet", Toast.LENGTH_SHORT).show() }
+    }
+}
+
 private val findingTypes = listOf(
-    "EVENT", "DEADLINE", "PRODUCT", "PLACE", "CODE", "WIFI", "TRACKING", "RECIPE",
+    "EVENT", "DEADLINE", "PRODUCT", "PLACE", "CODE", "WIFI", "URL", "PHONE", "TRACKING", "RECIPE",
 )
