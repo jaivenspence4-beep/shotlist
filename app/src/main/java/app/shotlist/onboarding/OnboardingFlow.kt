@@ -58,15 +58,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.EngineApi
-import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.liquidbg.LiquidBackground
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.delay
 
 @Composable
 fun OnboardingFlow(
+    sceneKey: String = "phasebeam",
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -118,52 +119,58 @@ fun OnboardingFlow(
         modifier = modifier
             .fillMaxSize()
             .background(glassBackgroundBrush())
-            .hazeSource(hazeState)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(20.dp),
+            .hazeSource(hazeState),
         contentAlignment = Alignment.Center,
     ) {
-        GlassBackdrop()
-        AnimatedContent(targetState = step, label = "onboarding-step") { currentStep ->
-            when (currentStep) {
-                PermissionStep.Intro -> IntroStep(
-                    onContinue = {
-                        step = PermissionStep.Requesting
-                        permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
-                    },
-                    onShareOnly = onFinished,
-                    hazeState = hazeState,
-                )
-                PermissionStep.Requesting -> ProgressStep(
-                    title = "Waiting for permission",
-                    detail = "Android is asking for screenshot access now.",
-                    reveal = reveal,
-                    hazeState = hazeState,
-                )
-                PermissionStep.Scanning -> ProgressStep(
-                    title = "Reading your screenshot graveyard",
-                    detail = if (hasPartialImageAccess(context) && !hasImagePermission(context)) {
-                        "Limited-photo mode is on. Shotlist will scan the screenshots Android allowed and you can share more anytime."
-                    } else {
-                        "OCR is running locally. Useful events, deadlines, and codes will appear as they are found."
-                    },
-                    reveal = reveal,
-                    hazeState = hazeState,
-                )
-                PermissionStep.Ready -> ReadyStep(
-                    reveal = reveal,
-                    onFinished = onFinished,
-                    hazeState = hazeState,
-                )
-                PermissionStep.Denied -> DeniedStep(
-                    onRetry = {
-                        step = PermissionStep.Requesting
-                        permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
-                    },
-                    onShareOnly = onFinished,
-                    hazeState = hazeState,
-                )
+        LiquidBackground(sceneKey = sceneKey)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(targetState = step, label = "onboarding-step") { currentStep ->
+                when (currentStep) {
+                    PermissionStep.Intro -> IntroStep(
+                        onContinue = {
+                            step = PermissionStep.Requesting
+                            permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
+                        },
+                        onShareOnly = onFinished,
+                        hazeState = hazeState,
+                    )
+                    PermissionStep.Requesting -> ProgressStep(
+                        title = "Waiting for permission",
+                        detail = "Android is asking for screenshot access now.",
+                        reveal = reveal,
+                        hazeState = hazeState,
+                    )
+                    PermissionStep.Scanning -> ProgressStep(
+                        title = "Reading your screenshot graveyard",
+                        detail = if (hasPartialImageAccess(context) && !hasImagePermission(context)) {
+                            "Limited-photo mode is on. Shotlist will scan the screenshots Android allowed and you can share more anytime."
+                        } else {
+                            "OCR is running locally. Useful events, deadlines, and codes will appear as they are found."
+                        },
+                        reveal = reveal,
+                        hazeState = hazeState,
+                    )
+                    PermissionStep.Ready -> ReadyStep(
+                        reveal = reveal,
+                        onFinished = onFinished,
+                        hazeState = hazeState,
+                    )
+                    PermissionStep.Denied -> DeniedStep(
+                        onRetry = {
+                            step = PermissionStep.Requesting
+                            permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
+                        },
+                        onShareOnly = onFinished,
+                        hazeState = hazeState,
+                    )
+                }
             }
         }
     }
