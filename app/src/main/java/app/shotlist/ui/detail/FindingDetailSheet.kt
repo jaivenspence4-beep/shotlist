@@ -401,7 +401,9 @@ private fun DetailButton(text: String, icon: ImageVector, accent: Color, onClick
 
 private fun whySurfaced(finding: Finding, action: ShotlistAction, accent: Color): AnnotatedString =
     buildAnnotatedString {
-        append("Shotlist recognized a ${detailKindLabel(action.kind).lowercase()}")
+        val label = detailKindLabel(action.kind).lowercase()
+        val article = if (label.firstOrNull() in listOf('a', 'e', 'i', 'o', 'u')) "an" else "a"
+        append("Shotlist recognized $article $label")
         val matched = finding.snippet.ifBlank { finding.title }
         if (matched.isNotBlank()) {
             append(": ")
