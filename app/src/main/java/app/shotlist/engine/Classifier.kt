@@ -19,7 +19,7 @@ object Classifier {
      * shipped without a bump and stale junk survived on-device through two
      * installs. If you touched this file, you almost certainly bump this.
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /** Suggestions below this never reach the inbox. */
     private const val CONFIDENCE_FLOOR = 0.55f
@@ -76,6 +76,21 @@ object Classifier {
 
     private val whenFormat = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a")
 
+    // Payment screens: "Visa ending 4242, Expires 05/31" is a card expiry,
+    // never a reminder (device row id62).
+    private val cardContext = Regex(
+        "(visa|mastercard|amex|discover|card ending|ending in \\d{4}|•{3,}\\s?\\d{4})",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // Shipping estimates: "est. delivery Aug 12-14" beside "deal ends 00:48"
+    // pairs an unrelated anchor with an unrelated date (device row id59) —
+    // demand extra anchors when the only dates around are logistics.
+    private val shippingContext = Regex(
+        "(est\\.?\\s*delivery|delivery by|free shipping|arrives|ships by|ships in)",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun classify(shotId: Long, text: String, s: Extractor.Signals): List<Finding> {
         val cleaned = clockLine.replace(text, "")
         val lower = cleaned.lowercase()
@@ -96,13 +111,15 @@ object Classifier {
         val isRelative = datetime?.matched?.lowercase() in
             setOf("today", "tonight", "tomorrow")
         val anchors = maxOf(eventScore, deadlineScore)
-        val anchorsNeeded = if (isRelative == true) 2 else 1
+        var anchorsNeeded = if (isRelative == true) 2 else 1
+        if (shippingContext.containsMatchIn(lower)) anchorsNeeded += 2
+        val paymentScreen = cardContext.containsMatchIn(lower)
 
         // A past event is not actionable: explicit-year dates ("Aug 23, 2026"
         // in an old letter) dodge the parser's future-bias and minted cards
         // for things already over.
         val nowMs = System.currentTimeMillis()
-        if (hasRealDate && anchors >= anchorsNeeded && title != null &&
+        if (hasRealDate && !paymentScreen && anchors >= anchorsNeeded && title != null &&
             DateTimeParser.toEpochMillis(datetime!!) > nowMs - 24 * 3600_000L
         ) {
             val isDeadline = deadlineScore > eventScore
@@ -124,11 +141,14 @@ object Classifier {
         val bestPrice = s.prices.filter { it in 99..10_000_00 }.maxOrNull()
         val productAnchors = score(lower, productWords)
         val productBar = if (s.urls.size > 1) 3 else 2
-        if (bestPrice != null && productAnchors >= productBar && title != null) {
+        // "Ranch" (a cart modifier) is not a product name — single short words
+        // don't title purchases (device row id57).
+        val productTitle = title?.takeUnless { !it.contains(' ') && it.length < 8 }
+        if (bestPrice != null && productAnchors >= productBar && productTitle != null) {
             out += Finding(
                 shotId = shotId,
                 type = "PRODUCT",
-                title = title,
+                title = productTitle,
                 snippet = "Spotted at ${formatPrice(bestPrice)} — keeping it for you",
                 amountCents = bestPrice,
                 confidence = 0.65f,

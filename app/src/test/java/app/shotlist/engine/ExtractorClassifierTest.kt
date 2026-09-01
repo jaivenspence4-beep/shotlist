@@ -172,6 +172,31 @@ class ExtractorClassifierTest {
     }
 
     @Test
+    fun `card expiry on a payment screen is never a deadline`() {
+        // Device row id62: Little Caesars checkout.
+        val text = "Little Caesars Checkout\nVisa ending 4242\nExpires: 05/31\npayment due"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "DEADLINE" || it.type == "EVENT" })
+    }
+
+    @Test
+    fun `shipping estimate dates need overwhelming anchors`() {
+        // Device row id59: EONON listing, "deal ends" anchor + delivery date.
+        val text = "EONON Car Stereo\nFree shipping, est. delivery Aug 12-14\n" +
+            "Deal ends in 00:48:11"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.whenAt != null })
+    }
+
+    @Test
+    fun `single short words are not product titles`() {
+        // Device row id57: BWW cart modifier.
+        val text = "Ranch\n$1.99 · add to cart · checkout · order"
+        val findings = Classifier.classify(1L, text, Extractor.extract(text))
+        assertTrue(findings.none { it.type == "PRODUCT" && it.title == "Ranch" })
+    }
+
+    @Test
     fun `explicit past dates never become cards`() {
         // Build-36 device row: a letter dated with an explicit year in the past.
         val text = "Dear Stacey, Brian, Jasmine, and Flint,\n" +
