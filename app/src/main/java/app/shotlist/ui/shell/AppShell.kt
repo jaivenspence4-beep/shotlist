@@ -1,6 +1,7 @@
 package app.shotlist.ui.shell
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -52,7 +53,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -91,19 +91,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.work.WorkManager
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
 import app.shotlist.data.ShotlistDb
+import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.onboarding.OnboardingFlow
 import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
+import app.shotlist.ui.you.YouScreen
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -144,6 +149,9 @@ fun AppShell() {
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
+    var autoScanEnabled by rememberSaveable {
+        mutableStateOf(prefs.getBoolean("auto_scan", true))
+    }
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
     }
@@ -255,12 +263,49 @@ fun AppShell() {
                         subtitle = "Cycle, habits, streaks. Private and local-first.",
                         badge = "Platform",
                     )
-                    Tab.You -> ModulePlaceholder(
+                    Tab.You -> YouScreen(
                         hazeState = hazeState,
-                        icon = Icons.Outlined.Lock,
-                        title = "You",
-                        subtitle = "Vault, privacy dashboard, settings, and local-only controls.",
-                        badge = "Screenshot contents stay on this device",
+                        screenshotsChecked = shotCount,
+                        thingsReady = actions.size,
+                        imageAccessGranted = imageAccessGranted,
+                        autoScanEnabled = autoScanEnabled,
+                        onAutoScanChanged = { enabled ->
+                            autoScanEnabled = enabled
+                            prefs.edit().putBoolean("auto_scan", enabled).apply()
+                            if (enabled) EngineApi.startObserving(context) else EngineApi.stopObserving()
+                            successMessage = if (enabled) "Watching new screenshots" else "Auto-scan paused"
+                        },
+                        onOpenVault = {
+                            val keyguard = context.getSystemService(KeyguardManager::class.java)
+                            val intent = keyguard?.createConfirmDeviceCredentialIntent(
+                                "Unlock Shotlist Vault",
+                                "Sensitive finds stay behind your screen lock",
+                            )
+                            if (intent != null) {
+                                context.startActivity(intent)
+                            } else {
+                                successMessage = "Set up a screen lock to use Vault"
+                            }
+                        },
+                        onShareBugReport = {
+                            context.startActivity(Diag.shareIntent(context))
+                        },
+                        onDeleteAllData = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            EngineApi.stopObserving()
+                            WorkManager.getInstance(context).cancelAllWork()
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    db.clearAllTables()
+                                    context.filesDir.resolve("shared").deleteRecursively()
+                                    context.filesDir.resolve("diag.log").delete()
+                                }
+                                context.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
+                                    .edit().clear().apply()
+                                prefs.edit().clear().apply()
+                                onboardingComplete = false
+                            }
+                        },
                     )
                 }
             }
