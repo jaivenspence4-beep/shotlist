@@ -1,7 +1,6 @@
 package app.shotlist.ui.shell
 
 import android.Manifest
-import android.app.KeyguardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -67,6 +66,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,11 +86,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.work.WorkManager
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
@@ -146,12 +152,55 @@ fun AppShell() {
     val db = remember(context) { ShotlistDb.get(context) }
     val scope = rememberCoroutineScope()
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
+    val vaultedFindings by db.findings().vaulted().collectAsState(initial = emptyList())
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
     var autoScanEnabled by rememberSaveable {
         mutableStateOf(prefs.getBoolean("auto_scan", true))
+    }
+    var vaultUnlocked by remember { mutableStateOf(false) }
+    val activity = context as? FragmentActivity
+    val biometricPrompt = remember(activity) {
+        activity?.let {
+            BiometricPrompt(
+                it,
+                ContextCompat.getMainExecutor(it),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        vaultUnlocked = true
+                        successMessage = "Vault unlocked"
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                            errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                        ) {
+                            successMessage = errString.toString()
+                        }
+                    }
+                },
+            )
+        }
+    }
+    val vaultPromptInfo = remember {
+        BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Shotlist Vault")
+            .setSubtitle("Sensitive finds stay behind your screen lock")
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+            )
+            .build()
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) vaultUnlocked = false
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
@@ -262,6 +311,8 @@ fun AppShell() {
                         hazeState = hazeState,
                         screenshotsChecked = shotCount,
                         thingsReady = actions.size,
+                        vaultedFindings = vaultedFindings,
+                        vaultUnlocked = vaultUnlocked,
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
                         onAutoScanChanged = { enabled ->
@@ -271,16 +322,12 @@ fun AppShell() {
                             successMessage = if (enabled) "Watching new screenshots" else "Auto-scan paused"
                         },
                         onOpenVault = {
-                            val keyguard = context.getSystemService(KeyguardManager::class.java)
-                            val intent = keyguard?.createConfirmDeviceCredentialIntent(
-                                "Unlock Shotlist Vault",
-                                "Sensitive finds stay behind your screen lock",
-                            )
-                            if (intent != null) {
-                                context.startActivity(intent)
-                            } else {
-                                successMessage = "Set up a screen lock to use Vault"
-                            }
+                            biometricPrompt?.authenticate(vaultPromptInfo)
+                                ?: run { successMessage = "Vault unlock is unavailable" }
+                        },
+                        onCopyVaulted = { finding ->
+                            ShotlistActions.copyCode(context, finding.toShotlistAction())
+                            successMessage = "Copied privately"
                         },
                         onShareBugReport = {
                             context.startActivity(Diag.shareIntent(context))

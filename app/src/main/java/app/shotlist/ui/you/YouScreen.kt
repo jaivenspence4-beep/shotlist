@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,10 +28,12 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.WifiPassword
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +56,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.shotlist.data.Finding
 import app.shotlist.ui.glass.GlassPanel
 import dev.chrisbanes.haze.HazeState
 
@@ -61,10 +65,13 @@ fun YouScreen(
     hazeState: HazeState,
     screenshotsChecked: Int,
     thingsReady: Int,
+    vaultedFindings: List<Finding>,
+    vaultUnlocked: Boolean,
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
+    onCopyVaulted: (Finding) -> Unit,
     onShareBugReport: () -> Unit,
     onDeleteAllData: () -> Unit,
     modifier: Modifier = Modifier,
@@ -94,7 +101,7 @@ fun YouScreen(
                     .fillMaxWidth()
                     .clickable {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onOpenVault()
+                        if (!vaultUnlocked) onOpenVault()
                     },
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -110,14 +117,53 @@ fun YouScreen(
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Private vault", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                         Text(
-                            "Codes and sensitive finds, behind your fingerprint",
+                            "Private vault · ${vaultedFindings.size}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                        )
+                        Text(
+                            if (vaultUnlocked) "Unlocked for this visit" else "Codes and Wi-Fi, behind your screen lock",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
                         )
                     }
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    Icon(
+                        if (vaultUnlocked) Icons.Outlined.CheckCircle else Icons.Outlined.ChevronRight,
+                        contentDescription = null,
+                        tint = if (vaultUnlocked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+        if (vaultUnlocked) {
+            if (vaultedFindings.isEmpty()) {
+                item {
+                    GlassPanel(
+                        hazeState = hazeState,
+                        cornerRadius = 26.dp,
+                        contentPadding = PaddingValues(15.dp),
+                        accent = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Nothing sensitive saved", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Codes and Wi-Fi passwords you find will appear here automatically.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        )
+                    }
+                }
+            } else {
+                items(vaultedFindings, key = { "vault-${it.id}" }) { finding ->
+                    VaultFindingCard(
+                        hazeState = hazeState,
+                        finding = finding,
+                        onCopy = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onCopyVaulted(finding)
+                        },
+                    )
                 }
             }
         }
@@ -243,6 +289,46 @@ fun YouScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun VaultFindingCard(
+    hazeState: HazeState,
+    finding: Finding,
+    onCopy: () -> Unit,
+) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 26.dp,
+        contentPadding = PaddingValues(15.dp),
+        accent = MaterialTheme.colorScheme.tertiary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onCopy),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (finding.type == "WIFI") Icons.Outlined.WifiPassword else Icons.Outlined.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(finding.title, fontWeight = FontWeight.Bold)
+                Text(
+                    finding.payload.ifBlank { finding.snippet },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    maxLines = 2,
+                )
+            }
+            Icon(
+                Icons.Outlined.ContentCopy,
+                contentDescription = "Copy",
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+        }
     }
 }
 
