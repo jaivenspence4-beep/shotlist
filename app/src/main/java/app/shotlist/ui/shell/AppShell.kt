@@ -3,12 +3,16 @@ package app.shotlist.ui.shell
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,11 +43,9 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.WifiPassword
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SwipeToDismissBox
@@ -51,6 +53,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,8 +66,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,11 +79,13 @@ import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
 import app.shotlist.data.ShotlistDb
 import app.shotlist.onboarding.OnboardingFlow
+import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Inbox("Inbox", Icons.Outlined.Inbox),
@@ -90,6 +98,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun AppShell() {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val prefs = remember(context) {
         context.getSharedPreferences("shotlist_onboarding", android.content.Context.MODE_PRIVATE)
     }
@@ -113,6 +122,7 @@ fun AppShell() {
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
+    var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
     }
@@ -124,13 +134,20 @@ fun AppShell() {
         }
     }
 
+    LaunchedEffect(successMessage) {
+        if (successMessage != null) {
+            delay(1_800)
+            successMessage = null
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(glassBackgroundBrush())
             .hazeSource(state = hazeState),
     ) {
-        AmbientOrbs()
+        GlassBackdrop()
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -152,6 +169,8 @@ fun AppShell() {
                         scannedCount = shotCount,
                         hazeState = hazeState,
                         onAccept = { action ->
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            successMessage = "Done — nice catch"
                             when (action.kind) {
                                 ActionKind.Event, ActionKind.Deadline -> {
                                     context.startActivity(ShotlistActions.calendarInsertIntent(action))
@@ -168,8 +187,16 @@ fun AppShell() {
                                 ActionKind.Product, ActionKind.Recipe, ActionKind.Noise -> setState(action, "ACCEPTED")
                             }
                         },
-                        onSnooze = { setState(it, "SNOOZED") },
-                        onDismiss = { setState(it, "DISMISSED") },
+                        onSnooze = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            successMessage = "Tucked away for later"
+                            setState(it, "SNOOZED")
+                        },
+                        onDismiss = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            successMessage = "Cleared out"
+                            setState(it, "DISMISSED")
+                        },
                     )
                     Tab.Scan -> ModulePlaceholder(
                         hazeState = hazeState,
@@ -197,9 +224,35 @@ fun AppShell() {
             Spacer(Modifier.height(14.dp))
             GlassNavBar(
                 selected = selected,
-                onSelected = { selected = it },
+                onSelected = {
+                    if (selected != it) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selected = it
+                    }
+                },
                 hazeState = hazeState,
             )
+        }
+        AnimatedVisibility(
+            visible = successMessage != null,
+            enter = fadeIn() + scaleIn(initialScale = 0.78f, animationSpec = spring()),
+            exit = fadeOut() + scaleOut(targetScale = 0.9f),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 94.dp),
+        ) {
+            GlassPanel(
+                hazeState = hazeState,
+                cornerRadius = 24.dp,
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 11.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(8.dp))
+                    Text(successMessage.orEmpty(), fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
@@ -223,9 +276,7 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
             }
-            IconButton(onClick = { }) {
-                Icon(Icons.Outlined.Search, contentDescription = "Search")
-            }
+            Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
         }
     }
 }
@@ -253,9 +304,9 @@ private fun InboxScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = { }, label = { Text("${actions.count { it.kind == ActionKind.Event }} events") })
-                AssistChip(onClick = { }, label = { Text("${actions.count { it.kind == ActionKind.Code }} codes") })
-                AssistChip(onClick = { }, label = { Text("${actions.count { it.kind == ActionKind.Deadline }} deadlines") })
+                StatPill("${actions.count { it.kind == ActionKind.Event }} events")
+                StatPill("${actions.count { it.kind == ActionKind.Code }} codes")
+                StatPill("${actions.count { it.kind == ActionKind.Deadline }} deadlines")
             }
         }
         if (actions.isEmpty()) {
@@ -305,9 +356,11 @@ private fun HeroCard(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
         )
         Spacer(Modifier.height(16.dp))
-        FilledTonalButton(onClick = { }) {
-            Text("Review the useful stuff")
-        }
+        Text(
+            if (actionCount == 0) "Waiting for your next screenshot" else "Ready when you are",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.secondary,
+        )
     }
 }
 
@@ -328,6 +381,18 @@ private fun EmptyInboxCard(hazeState: dev.chrisbanes.haze.HazeState) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         )
     }
+}
+
+@Composable
+private fun StatPill(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+        modifier = Modifier
+            .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -444,7 +509,14 @@ private fun ModulePlaceholder(
         Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
         Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
         Spacer(Modifier.height(18.dp))
-        AssistChip(onClick = { }, label = { Text(badge) })
+        Text(
+            badge,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+        )
     }
 }
 
@@ -463,7 +535,33 @@ private fun GlassNavBar(
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Tab.entries.forEachIndexed { index, tab ->
                 val isSelected = selected == index
-                androidx.compose.material3.TextButton(onClick = { onSelected(index) }) {
+                val pillColor by animateColorAsState(
+                    targetValue = if (isSelected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    } else {
+                        Color.Transparent
+                    },
+                    animationSpec = spring(),
+                    label = "tab-pill",
+                )
+                val pillScale by animateFloatAsState(
+                    targetValue = if (isSelected) 1f else 0.94f,
+                    animationSpec = spring(),
+                    label = "tab-scale",
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .graphicsLayer {
+                            scaleX = pillScale
+                            scaleY = pillScale
+                        }
+                        .background(pillColor, RoundedCornerShape(24.dp))
+                        .clickable { onSelected(index) }
+                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                ) {
                     Icon(
                         tab.icon,
                         contentDescription = tab.label,
@@ -479,13 +577,4 @@ private fun GlassNavBar(
             }
         }
     }
-}
-
-@Composable
-private fun AmbientOrbs() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-    )
 }

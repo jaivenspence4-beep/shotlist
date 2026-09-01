@@ -8,6 +8,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -30,7 +34,6 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,12 +49,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.EngineApi
+import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import dev.chrisbanes.haze.HazeState
@@ -117,6 +124,7 @@ fun OnboardingFlow(
             .padding(20.dp),
         contentAlignment = Alignment.Center,
     ) {
+        GlassBackdrop()
         AnimatedContent(targetState = step, label = "onboarding-step") { currentStep ->
             when (currentStep) {
                 PermissionStep.Intro -> IntroStep(
@@ -167,6 +175,7 @@ private fun IntroStep(
     onShareOnly: () -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState,
 ) {
+    val haptics = LocalHapticFeedback.current
     GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Outlined.ImageSearch, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(18.dp))
@@ -180,11 +189,23 @@ private fun IntroStep(
         Spacer(Modifier.height(18.dp))
         PrivacyBullets()
         Spacer(Modifier.height(22.dp))
-        FilledTonalButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
+        FilledTonalButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onContinue()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Scan my screenshots")
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onShareOnly, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onShareOnly()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Use share sheet only")
         }
     }
@@ -224,8 +245,24 @@ private fun ReadyStep(
     onFinished: () -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState,
 ) {
+    val haptics = LocalHapticFeedback.current
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val iconScale by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.62f,
+        animationSpec = spring(),
+        label = "ready-pop",
+    )
     GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
-        Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Icon(
+            Icons.Outlined.NotificationsActive,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.graphicsLayer {
+                scaleX = iconScale
+                scaleY = iconScale
+            },
+        )
         Spacer(Modifier.height(18.dp))
         Text("Your Inbox is alive", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(10.dp))
@@ -241,8 +278,14 @@ private fun ReadyStep(
         Spacer(Modifier.height(18.dp))
         RevealRow(reveal)
         Spacer(Modifier.height(22.dp))
-        FilledTonalButton(onClick = onFinished, modifier = Modifier.fillMaxWidth()) {
-            Text("Open Inbox")
+        FilledTonalButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onFinished()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Show me the good stuff")
         }
     }
 }
@@ -253,6 +296,7 @@ private fun DeniedStep(
     onShareOnly: () -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState,
 ) {
+    val haptics = LocalHapticFeedback.current
     GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Outlined.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(18.dp))
@@ -264,11 +308,23 @@ private fun DeniedStep(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
         )
         Spacer(Modifier.height(22.dp))
-        FilledTonalButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+        FilledTonalButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onRetry()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Try permission again")
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onShareOnly, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onShareOnly()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Continue with share sheet")
         }
     }
@@ -294,16 +350,35 @@ private fun PrivacyBullet(icon: androidx.compose.ui.graphics.vector.ImageVector,
 
 @Composable
 private fun RevealRow(reveal: OnboardingReveal) {
+    val screenshotsRead by animateIntAsState(
+        targetValue = reveal.screenshotsRead,
+        animationSpec = tween(durationMillis = 700),
+        label = "screenshots-read",
+    )
+    val suggestedActions by animateIntAsState(
+        targetValue = reveal.suggestedActions,
+        animationSpec = tween(durationMillis = 700),
+        label = "suggested-actions",
+    )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { }, label = { Text("${reveal.screenshotsRead} read") })
-            AssistChip(onClick = { }, label = { Text("${reveal.suggestedActions} useful") })
+            RevealPill("$screenshotsRead read")
+            RevealPill("$suggestedActions useful")
         }
-        AssistChip(
-            onClick = { },
-            label = { Text("Screenshot contents stay on this device") },
-        )
+        RevealPill("Screenshot contents stay on this device")
     }
+}
+
+@Composable
+private fun RevealPill(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    )
 }
 
 /**
