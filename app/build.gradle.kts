@@ -76,7 +76,12 @@ dependencies {
 
     // Engine
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Widgets
+    implementation("androidx.glance:glance-appwidget:1.1.1")
 
     // Scan modules (camera)
     implementation("androidx.camera:camera-core:1.4.1")

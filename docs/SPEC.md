@@ -61,6 +61,28 @@ it shows the phone answering back.
 - Gemini Nano / AICore tier on capable devices (better titles, visual-only flyers)
 - Multi-language OCR packs
 
+### The hit-list (Jaiven 2026-08-31: "every feature that made any app popular")
+
+Every mechanic below made a top app's fortune; each maps onto our engine + glass:
+
+| Borrowed from | Feature here | Status |
+|---|---|---|
+| Duolingo/Snapchat | Global daily streak ("day handled") + habit streaks | habits done; global streak queued |
+| Locket/Widgetable | Home-screen widgets: Next Up, streak, vault quick-copy | queued (Glance) |
+| Spotify Wrapped / BeReal recap | Weekly "Your week in screenshots" share card; yearly Wrapped | queued |
+| Cal AI | Scan › Food calories + log | on-device rough estimate first; cloud upgrade = open decision |
+| PictureThis / PlantMap | Scan › Plant ID + care reminders | port from ~/Desktop/PlantMap |
+| Flo | Cycle predictions + gentle insights | base done; predictions queued |
+| CamScanner/Adobe Scan | Scan › Docs → clean PDF (ML Kit doc scanner) | queued |
+| Google Lens | Scan › QR/barcode acting (wifi QR joins vault, links open) | queued (bundled ML Kit) |
+| Google Lens translate | Scan › Translate overlay | parked: model download needs INTERNET, conflicts with zero-network posture |
+| 1Password | Vault (biometric) + document vault for IDs | vault done; docs queued |
+| Wallpaper apps | Glass theme picker (palettes, orb styles) | queued, cheap fun |
+| Everything viral | Aesthetic share-card generator for any finding/stat | queued — every surface gets a share button |
+
+Law unchanged: one module per release, each release is a TikTok demo, inbox
+precision is never sacrificed for breadth.
+
 ### Module roadmap (the super-app build-out)
 - **Scan › Food**: point at a plate → calories/macros card, daily log, streaks
   (the Cal AI loop, inside the platform)
