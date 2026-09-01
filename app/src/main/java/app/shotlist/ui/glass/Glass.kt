@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.shotlist.ui.theme.LocalOrbStyle
+import app.shotlist.ui.theme.OrbStyle
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -89,37 +91,51 @@ fun GlassPanel(
 /** Saturated light pools give the blur visible depth without becoming content. */
 @Composable
 fun GlassBackdrop(modifier: Modifier = Modifier) {
-    val electricBlue = Color(0xFF587CFF)
-    val aqua = Color(0xFF21E6C1)
-    val hotPink = Color(0xFFFF4FB8)
-    val amber = Color(0xFFFFA64D)
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val orbStyle = LocalOrbStyle.current
     val transition = rememberInfiniteTransition(label = "glass-drift")
     val drift by transition.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 14_000, easing = FastOutSlowInEasing),
+            animation = tween(
+                durationMillis = when (orbStyle) {
+                    OrbStyle.DRIFT -> 14_000
+                    OrbStyle.HALO -> 20_000
+                    OrbStyle.AURORA -> 9_000
+                },
+                easing = FastOutSlowInEasing,
+            ),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "orb-drift",
     )
     Canvas(modifier = modifier.fillMaxSize()) {
-        val radius = size.minDimension * 0.58f
-        val primaryCenter = Offset(
-            size.width * (0.02f + drift * 0.04f),
-            size.height * (0.16f + drift * 0.018f),
-        )
-        val secondaryCenter = Offset(
-            size.width * (1.02f - drift * 0.03f),
-            size.height * (0.48f + drift * 0.025f),
-        )
-        val tertiaryCenter = Offset(
-            size.width * (0.18f + drift * 0.03f),
-            size.height * (0.88f - drift * 0.022f),
-        )
+        val radius = size.minDimension * when (orbStyle) {
+            OrbStyle.DRIFT -> 0.58f
+            OrbStyle.HALO -> 0.48f
+            OrbStyle.AURORA -> 0.70f
+        }
+        val primaryCenter = when (orbStyle) {
+            OrbStyle.DRIFT -> Offset(size.width * (0.02f + drift * 0.04f), size.height * (0.16f + drift * 0.018f))
+            OrbStyle.HALO -> Offset(size.width * 0.50f, size.height * (0.24f + drift * 0.012f))
+            OrbStyle.AURORA -> Offset(size.width * (0.18f + drift * 0.16f), size.height * 0.10f)
+        }
+        val secondaryCenter = when (orbStyle) {
+            OrbStyle.DRIFT -> Offset(size.width * (1.02f - drift * 0.03f), size.height * (0.48f + drift * 0.025f))
+            OrbStyle.HALO -> Offset(size.width * 0.50f, size.height * 0.52f)
+            OrbStyle.AURORA -> Offset(size.width * (0.82f - drift * 0.13f), size.height * 0.50f)
+        }
+        val tertiaryCenter = when (orbStyle) {
+            OrbStyle.DRIFT -> Offset(size.width * (0.18f + drift * 0.03f), size.height * (0.88f - drift * 0.022f))
+            OrbStyle.HALO -> Offset(size.width * 0.50f, size.height * 0.80f)
+            OrbStyle.AURORA -> Offset(size.width * (0.25f - drift * 0.10f), size.height * 0.91f)
+        }
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(electricBlue.copy(alpha = 0.62f), hotPink.copy(alpha = 0.13f), Color.Transparent),
+                colors = listOf(primary.copy(alpha = 0.62f), tertiary.copy(alpha = 0.13f), Color.Transparent),
                 center = primaryCenter,
                 radius = radius,
             ),
@@ -128,7 +144,7 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(aqua.copy(alpha = 0.45f), electricBlue.copy(alpha = 0.08f), Color.Transparent),
+                colors = listOf(secondary.copy(alpha = 0.45f), primary.copy(alpha = 0.08f), Color.Transparent),
                 center = secondaryCenter,
                 radius = radius * 0.9f,
             ),
@@ -137,7 +153,7 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(hotPink.copy(alpha = 0.40f), amber.copy(alpha = 0.10f), Color.Transparent),
+                colors = listOf(tertiary.copy(alpha = 0.40f), primary.copy(alpha = 0.10f), Color.Transparent),
                 center = tertiaryCenter,
                 radius = radius * 0.72f,
             ),
@@ -145,9 +161,9 @@ fun GlassBackdrop(modifier: Modifier = Modifier) {
             center = tertiaryCenter,
         )
         drawCircle(
-            color = amber.copy(alpha = 0.08f),
+            color = secondary.copy(alpha = if (orbStyle == OrbStyle.HALO) 0.20f else 0.08f),
             radius = radius * 0.48f,
-            center = Offset(size.width * 0.88f, size.height * 0.08f),
+            center = if (orbStyle == OrbStyle.HALO) primaryCenter else Offset(size.width * 0.88f, size.height * 0.08f),
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()),
         )
     }
@@ -161,9 +177,9 @@ fun glassBackgroundBrush(): Brush {
     return Brush.linearGradient(
         colors = listOf(
             background,
-            Color(0xFF1A2450),
+            MaterialTheme.colorScheme.surfaceVariant,
             primary.copy(alpha = 0.30f),
-            Color(0xFF11162D),
+            MaterialTheme.colorScheme.surface,
             secondary.copy(alpha = 0.20f),
             background,
         ),

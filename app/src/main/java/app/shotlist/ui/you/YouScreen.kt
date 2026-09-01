@@ -61,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.shotlist.data.Finding
 import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.ui.theme.OrbStyle
+import app.shotlist.ui.theme.ShotlistPalette
 import dev.chrisbanes.haze.HazeState
 
 @Composable
@@ -72,6 +74,10 @@ fun YouScreen(
     vaultUnlocked: Boolean,
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
+    palette: ShotlistPalette,
+    orbStyle: OrbStyle,
+    onPaletteChanged: (ShotlistPalette) -> Unit,
+    onOrbStyleChanged: (OrbStyle) -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
     onCopyVaulted: (Finding) -> Unit,
@@ -173,6 +179,92 @@ fun YouScreen(
                             onUnvault(finding)
                         },
                     )
+                }
+            }
+        }
+        item {
+            Text(
+                "YOUR GLASS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+            )
+        }
+        item {
+            GlassPanel(
+                hazeState = hazeState,
+                cornerRadius = 30.dp,
+                contentPadding = PaddingValues(16.dp),
+                accent = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Color mood", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(9.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ShotlistPalette.entries.forEach { choice ->
+                        val selected = choice == palette
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (selected) palettePreview(choice).copy(alpha = 0.24f)
+                                    else Color.White.copy(alpha = 0.05f),
+                                    RoundedCornerShape(18.dp),
+                                )
+                                .clickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onPaletteChanged(choice)
+                                }
+                                .padding(vertical = 11.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(palettePreview(choice), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(choice.emoji, color = Color(0xFF0B1020), fontWeight = FontWeight.Black)
+                            }
+                            Spacer(Modifier.height(5.dp))
+                            Text(choice.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 14.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
+                Text("Light motion", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(5.dp))
+                OrbStyle.entries.forEach { choice ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onOrbStyleChanged(choice)
+                            }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(choice.label, fontWeight = FontWeight.Bold)
+                            Text(
+                                choice.detail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                            )
+                        }
+                        if (choice == orbStyle) {
+                            Icon(
+                                Icons.Outlined.CheckCircle,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -313,6 +405,12 @@ fun YouScreen(
             },
         )
     }
+}
+
+private fun palettePreview(palette: ShotlistPalette): Color = when (palette) {
+    ShotlistPalette.COSMIC -> Color(0xFFA8B8FF)
+    ShotlistPalette.TIDE -> Color(0xFF62DDF5)
+    ShotlistPalette.SUNSET -> Color(0xFFFF9B78)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

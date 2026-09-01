@@ -117,6 +117,9 @@ import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.scan.ScanScreen
+import app.shotlist.ui.theme.OrbStyle
+import app.shotlist.ui.theme.ShotlistPalette
+import app.shotlist.ui.theme.ShotlistTheme
 import app.shotlist.ui.track.TrackScreen
 import app.shotlist.ui.you.YouScreen
 import dev.chrisbanes.haze.HazeState
@@ -138,9 +141,50 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     You("You", Icons.Outlined.Person),
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AppShell() {
+    val context = LocalContext.current
+    val appearancePrefs = remember(context) {
+        context.getSharedPreferences("shotlist_onboarding", Context.MODE_PRIVATE)
+    }
+    var palette by remember {
+        mutableStateOf(
+            appearancePrefs.getString("palette", null)
+                ?.let { runCatching { ShotlistPalette.valueOf(it) }.getOrNull() }
+                ?: ShotlistPalette.COSMIC,
+        )
+    }
+    var orbStyle by remember {
+        mutableStateOf(
+            appearancePrefs.getString("orb_style", null)
+                ?.let { runCatching { OrbStyle.valueOf(it) }.getOrNull() }
+                ?: OrbStyle.DRIFT,
+        )
+    }
+    ShotlistTheme(palette = palette, orbStyle = orbStyle) {
+        AppShellContent(
+            palette = palette,
+            orbStyle = orbStyle,
+            onPaletteChanged = {
+                palette = it
+                appearancePrefs.edit().putString("palette", it.name).apply()
+            },
+            onOrbStyleChanged = {
+                orbStyle = it
+                appearancePrefs.edit().putString("orb_style", it.name).apply()
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun AppShellContent(
+    palette: ShotlistPalette,
+    orbStyle: OrbStyle,
+    onPaletteChanged: (ShotlistPalette) -> Unit,
+    onOrbStyleChanged: (OrbStyle) -> Unit,
+) {
     val context = LocalContext.current
     val mainActivity = context as? MainActivity
     val deepLinkFindingId = mainActivity?.deepLinkFindingId
@@ -429,6 +473,10 @@ fun AppShell() {
                         vaultUnlocked = vaultUnlocked,
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
+                        palette = palette,
+                        orbStyle = orbStyle,
+                        onPaletteChanged = onPaletteChanged,
+                        onOrbStyleChanged = onOrbStyleChanged,
                         onAutoScanChanged = { enabled ->
                             autoScanEnabled = enabled
                             prefs.edit().putBoolean("auto_scan", enabled).apply()
