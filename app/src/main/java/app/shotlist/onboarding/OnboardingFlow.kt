@@ -56,6 +56,7 @@ import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.delay
 
 @Composable
 fun OnboardingFlow(
@@ -70,7 +71,7 @@ fun OnboardingFlow(
     val reveal = OnboardingReveal(screenshotsRead, suggestedActions)
     var step by rememberSaveable {
         mutableStateOf(
-            if (hasImagePermission(context)) PermissionStep.Scanning else PermissionStep.Intro,
+            if (hasUsableImageAccess(context)) PermissionStep.Scanning else PermissionStep.Intro,
         )
     }
     var backfillStarted by rememberSaveable { mutableStateOf(false) }
@@ -79,7 +80,9 @@ fun OnboardingFlow(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { result ->
         val granted = requiredImagePermissions().all { result[it] == true || hasPermission(context, it) }
+        val partial = hasPartialImageAccess(context)
         step = if (granted) PermissionStep.Scanning else PermissionStep.Denied
+        if (!granted && partial) step = PermissionStep.Scanning
     }
 
     LaunchedEffect(step) {
@@ -91,7 +94,15 @@ fun OnboardingFlow(
     }
 
     LaunchedEffect(step, screenshotsRead, suggestedActions) {
-        if (step == PermissionStep.Scanning && screenshotsRead > 0) {
+        if (step == PermissionStep.Scanning && suggestedActions > 0) {
+            delay(1_500)
+            step = PermissionStep.Ready
+        }
+    }
+
+    LaunchedEffect(step) {
+        if (step == PermissionStep.Scanning) {
+            delay(6_500)
             step = PermissionStep.Ready
         }
     }
@@ -124,7 +135,11 @@ fun OnboardingFlow(
                 )
                 PermissionStep.Scanning -> ProgressStep(
                     title = "Reading your screenshot graveyard",
-                    detail = "OCR is running locally. Useful events, deadlines, and codes will appear as they are found.",
+                    detail = if (hasPartialImageAccess(context) && !hasImagePermission(context)) {
+                        "Limited-photo mode is on. Shotlist will scan the screenshots Android allowed and you can share more anytime."
+                    } else {
+                        "OCR is running locally. Useful events, deadlines, and codes will appear as they are found."
+                    },
                     reveal = reveal,
                     hazeState = hazeState,
                 )
@@ -215,7 +230,11 @@ private fun ReadyStep(
         Text("Your Inbox is alive", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(10.dp))
         Text(
-            "Shotlist will keep watching new screenshots and only nudge when it sees something time-bound or useful.",
+            if (hasImagePermission(LocalContext.current)) {
+                "Shotlist will keep watching new screenshots and only nudge when it sees something time-bound or useful."
+            } else {
+                "Shotlist is ready in limited mode. Share screenshots into the app whenever Android does not allow background access."
+            },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
         )
@@ -285,6 +304,9 @@ private fun RevealRow(reveal: OnboardingReveal) {
 private fun requiredOnboardingPermissions(): List<String> =
     buildList {
         addAll(requiredImagePermissions())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -299,6 +321,13 @@ private fun requiredImagePermissions(): List<String> =
 
 private fun hasImagePermission(context: Context): Boolean =
     requiredImagePermissions().all { hasPermission(context, it) }
+
+private fun hasUsableImageAccess(context: Context): Boolean =
+    hasImagePermission(context) || hasPartialImageAccess(context)
+
+private fun hasPartialImageAccess(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+        hasPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
 
 private fun hasPermission(context: Context, permission: String): Boolean =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED

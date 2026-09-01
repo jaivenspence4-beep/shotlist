@@ -20,7 +20,10 @@ fun Finding.toShotlistAction(): ShotlistAction {
         findingId = id,
         kind = kind,
         title = title,
-        detail = snippet.ifBlank { payload.ifBlank { type.lowercase().replaceFirstChar { it.uppercase() } } },
+        detail = when (type) {
+            "CODE", "WIFI" -> "Sensitive value hidden. Tap Copy when you need it."
+            else -> snippet.ifBlank { payload.ifBlank { type.lowercase().replaceFirstChar { it.uppercase() } } }
+        },
         source = "screenshot #$shotId",
         confidence = confidence,
         startsAt = whenAt?.let(Instant::ofEpochMilli),
