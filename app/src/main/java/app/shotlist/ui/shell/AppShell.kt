@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.WifiPassword
 import androidx.compose.material3.ButtonDefaults
@@ -107,6 +108,7 @@ import app.shotlist.MainActivity
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
 import app.shotlist.actions.ShotlistActions
+import app.shotlist.data.Finding
 import app.shotlist.data.ShotlistDb
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
@@ -123,6 +125,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -164,6 +169,7 @@ fun AppShell() {
     val db = remember(context) { ShotlistDb.get(context) }
     val scope = rememberCoroutineScope()
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
+    val findingHistory by db.findings().byTypes(wrappedFindingTypes).collectAsState(initial = emptyList())
     val vaultedFindings by db.findings().vaulted().collectAsState(initial = emptyList())
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
@@ -176,6 +182,8 @@ fun AppShell() {
     var pendingVaultAction by remember { mutableStateOf<ShotlistAction?>(null) }
     var pendingNotificationAction by remember { mutableStateOf<ShotlistAction?>(null) }
     var notificationPermissionResult by remember { mutableIntStateOf(0) }
+    val dailyStreak = remember(prefs) { updateDailyStreak(prefs) }
+    val weeklyStats = remember(findingHistory) { buildWeeklyStats(findingHistory) }
     val activity = context as? FragmentActivity
     val biometricPrompt = remember(activity) {
         activity?.let {
@@ -335,7 +343,7 @@ fun AppShell() {
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 14.dp),
         ) {
-            TopGlassBar(hazeState = hazeState)
+            TopGlassBar(hazeState = hazeState, dailyStreak = dailyStreak)
             Spacer(Modifier.height(16.dp))
             AnimatedContent(
                 targetState = Tab.entries[selected],
@@ -351,6 +359,8 @@ fun AppShell() {
                         vaultedFindingIds = vaultedFindingIds,
                         vaultUnlocked = vaultUnlocked,
                         scannedCount = shotCount,
+                        dailyStreak = dailyStreak,
+                        weeklyStats = weeklyStats,
                         hasScreenshotAccess = imageAccessGranted,
                         hazeState = hazeState,
                         onRequestAccess = {
@@ -363,6 +373,10 @@ fun AppShell() {
                             } else {
                                 accessLauncher.launch(screenshotPermissions())
                             }
+                        },
+                        onShareWrapped = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            context.startActivity(weeklyShareIntent(dailyStreak, weeklyStats))
                         },
                         onAccept = { action ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -496,7 +510,10 @@ fun AppShell() {
 }
 
 @Composable
-private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
+private fun TopGlassBar(
+    hazeState: dev.chrisbanes.haze.HazeState,
+    dailyStreak: Int,
+) {
     GlassPanel(
         hazeState = hazeState,
         cornerRadius = 30.dp,
@@ -515,12 +532,12 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
                 )
             }
             Text(
-                "LOCAL",
+                "🔥 $dailyStreak",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary,
+                color = Color(0xFFFFBE63),
                 modifier = Modifier
-                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                    .background(Color(0xFFFFBE63).copy(alpha = 0.14f), RoundedCornerShape(999.dp))
                     .padding(horizontal = 9.dp, vertical = 5.dp),
             )
         }
@@ -535,9 +552,12 @@ private fun InboxScreen(
     vaultedFindingIds: Set<Long>,
     vaultUnlocked: Boolean,
     scannedCount: Int,
+    dailyStreak: Int,
+    weeklyStats: WeeklyStats,
     hasScreenshotAccess: Boolean,
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
+    onShareWrapped: () -> Unit,
     onAccept: (ShotlistAction) -> Unit,
     onVault: (ShotlistAction) -> Unit,
     onSnooze: (ShotlistAction) -> Unit,
@@ -546,7 +566,7 @@ private fun InboxScreen(
     val listState = rememberLazyListState()
     LaunchedEffect(focusRequestSerial, actions.size) {
         val actionIndex = actions.indexOfFirst { it.findingId == focusFindingId }
-        if (actionIndex >= 0) listState.animateScrollToItem(actionIndex + 2)
+        if (actionIndex >= 0) listState.animateScrollToItem(actionIndex + 3)
     }
     LazyColumn(
         state = listState,
@@ -563,12 +583,28 @@ private fun InboxScreen(
                     hazeState = hazeState,
                 )
             }
+            item {
+                WeeklyWrappedCard(
+                    dailyStreak = dailyStreak,
+                    stats = weeklyStats,
+                    hazeState = hazeState,
+                    onShare = onShareWrapped,
+                )
+            }
         } else {
             item {
                 HeroCard(
                     scannedCount = scannedCount,
                     actionCount = actions.size,
                     hazeState = hazeState,
+                )
+            }
+            item {
+                WeeklyWrappedCard(
+                    dailyStreak = dailyStreak,
+                    stats = weeklyStats,
+                    hazeState = hazeState,
+                    onShare = onShareWrapped,
                 )
             }
             item {
@@ -595,6 +631,106 @@ private fun InboxScreen(
         }
     }
 }
+
+private data class WeeklyStats(
+    val found: Int,
+    val acted: Int,
+    val topType: String,
+)
+
+@Composable
+private fun WeeklyWrappedCard(
+    dailyStreak: Int,
+    stats: WeeklyStats,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    onShare: () -> Unit,
+) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 30.dp,
+        contentPadding = PaddingValues(15.dp),
+        accent = Color(0xFFFF79C9),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "YOUR WEEK ✦",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFFF79C9),
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    "${stats.found} useful finds",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    "${stats.acted} handled · ${dailyStreak}-day rhythm · ${stats.topType}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+                )
+            }
+            FilledTonalButton(onClick = onShare) {
+                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Share", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+private fun buildWeeklyStats(findings: List<Finding>): WeeklyStats {
+    val start = LocalDate.now()
+        .with(DayOfWeek.MONDAY)
+        .atStartOfDay(ZoneId.systemDefault())
+        .toInstant()
+        .toEpochMilli()
+    val thisWeek = findings.filter { it.createdAt >= start }
+    val top = thisWeek.groupingBy { it.type }.eachCount().maxByOrNull { it.value }?.key
+        ?.lowercase()
+        ?.replaceFirstChar { it.uppercase() }
+        ?: "All clear"
+    return WeeklyStats(
+        found = thisWeek.size,
+        acted = thisWeek.count { it.state == "ACCEPTED" },
+        topType = top,
+    )
+}
+
+private fun updateDailyStreak(prefs: android.content.SharedPreferences): Int {
+    val today = LocalDate.now().toEpochDay()
+    val lastDay = prefs.getLong("daily_streak_last_day", Long.MIN_VALUE)
+    val oldStreak = prefs.getInt("daily_streak_current", 0)
+    val current = when {
+        lastDay == today -> oldStreak.coerceAtLeast(1)
+        lastDay == today - 1 -> oldStreak + 1
+        lastDay > today -> oldStreak.coerceAtLeast(1)
+        else -> 1
+    }
+    if (lastDay != today) {
+        prefs.edit()
+            .putLong("daily_streak_last_day", today)
+            .putInt("daily_streak_current", current)
+            .putInt("daily_streak_best", maxOf(current, prefs.getInt("daily_streak_best", 0)))
+            .apply()
+    }
+    return current
+}
+
+private fun weeklyShareIntent(streak: Int, stats: WeeklyStats): android.content.Intent =
+    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(
+            android.content.Intent.EXTRA_TEXT,
+            "My Shotlist week ✦\n${stats.found} useful finds · ${stats.acted} handled · " +
+                "${streak}-day rhythm\nTop find: ${stats.topType}\n\nScreenshots in. Life out.",
+        )
+    }.let { android.content.Intent.createChooser(it, "Share your Shotlist week") }
+
+private val wrappedFindingTypes = listOf(
+    "EVENT", "DEADLINE", "PRODUCT", "PLACE", "CODE", "WIFI", "URL", "PHONE", "TRACKING", "RECIPE",
+)
 
 @Composable
 private fun HeroCard(
