@@ -93,6 +93,28 @@ private enum class CapturePhase {
     Error,
 }
 
+private enum class ScanMode(
+    val label: String,
+    val headline: String,
+    val helper: String,
+) {
+    ANYTHING(
+        label = "Anything",
+        headline = "Point. Shotlist finds the useful bit.",
+        helper = "Dates, menus, labels, codes — processed here.",
+    ),
+    QR(
+        label = "QR",
+        headline = "Hold a code inside the corners.",
+        helper = "Links, Wi-Fi, contacts, and tickets act instantly.",
+    ),
+    DOCS(
+        label = "Docs",
+        headline = "Turn paper into something clean.",
+        helper = "Receipts, notes, and forms stay on this device.",
+    ),
+}
+
 @Composable
 fun ScanScreen(
     hazeState: HazeState,
@@ -104,6 +126,8 @@ fun ScanScreen(
     val allFindings by db.findings().byTypes(findingTypes).collectAsState(initial = emptyList())
     var cameraGranted by remember { mutableStateOf(hasCameraPermission(context)) }
     var phase by remember { mutableStateOf(CapturePhase.Ready) }
+    var selectedMode by remember { mutableStateOf(ScanMode.ANYTHING) }
+    var captureMode by remember { mutableStateOf(ScanMode.ANYTHING) }
     var captureMediaId by remember { mutableStateOf<Long?>(null) }
     var resultShot by remember { mutableStateOf<Shot?>(null) }
     var errorMessage by remember { mutableStateOf("") }
@@ -121,7 +145,7 @@ fun ScanScreen(
         repeat(120) {
             val shot = db.shots().byMediaId(mediaId)
             if (shot != null && shot.status != "NEW") {
-                db.scans().insert(Scan(shotId = shot.id, mode = "ANYTHING"))
+                db.scans().insert(Scan(shotId = shot.id, mode = captureMode.name))
                 resultShot = shot
                 phase = CapturePhase.Result
                 return@LaunchedEffect
@@ -179,33 +203,26 @@ fun ScanScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
+                .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(Color(0xB51A2138), RoundedCornerShape(999.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(999.dp))
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-            ) {
-                Icon(
-                    Icons.Outlined.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color(0xFF7EF5D8),
-                    modifier = Modifier.size(17.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text("ANYTHING", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            }
+            ModeCarousel(
+                selected = selectedMode,
+                enabled = phase == CapturePhase.Ready,
+                onSelected = { mode ->
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    selectedMode = mode
+                },
+            )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Point. Shotlist finds the useful bit.",
+                selectedMode.headline,
                 color = Color.White,
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
             )
             Text(
-                "Dates, menus, labels, codes — processed here.",
+                selectedMode.helper,
                 color = Color.White.copy(alpha = 0.76f),
                 fontSize = 14.sp,
             )
@@ -239,6 +256,7 @@ fun ScanScreen(
             ResultSheet(
                 hazeState = hazeState,
                 phase = phase,
+                mode = captureMode,
                 findings = resultFindings,
                 shot = resultShot,
                 errorMessage = errorMessage,
@@ -264,6 +282,7 @@ fun ScanScreen(
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     phase = CapturePhase.Capturing
+                    captureMode = selectedMode
                     captureToPipeline(
                         context = context,
                         imageCapture = imageCapture,
@@ -277,6 +296,40 @@ fun ScanScreen(
                         },
                     )
                 },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModeCarousel(
+    selected: ScanMode,
+    enabled: Boolean,
+    onSelected: (ScanMode) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xB51A2138), RoundedCornerShape(999.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(999.dp))
+            .padding(4.dp),
+    ) {
+        ScanMode.entries.forEach { mode ->
+            val active = mode == selected
+            Text(
+                mode.label,
+                color = if (active) Color(0xFF0B1020) else Color.White.copy(alpha = 0.76f),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (active) Color(0xFF7EF5D8) else Color.Transparent,
+                        RoundedCornerShape(999.dp),
+                    )
+                    .clickable(enabled = enabled) { onSelected(mode) }
+                    .padding(vertical = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
@@ -481,6 +534,7 @@ private fun ReadingOverlay(phase: CapturePhase, modifier: Modifier = Modifier) {
 private fun ResultSheet(
     hazeState: HazeState,
     phase: CapturePhase,
+    mode: ScanMode,
     findings: List<Finding>,
     shot: Shot?,
     errorMessage: String,
@@ -504,7 +558,7 @@ private fun ResultSheet(
             )
             Spacer(Modifier.width(9.dp))
             Text(
-                if (success) "Got it" else "One more try",
+                if (success) "${mode.label} captured" else "One more try",
                 fontWeight = FontWeight.Black,
                 fontSize = 20.sp,
             )
