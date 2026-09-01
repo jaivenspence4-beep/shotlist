@@ -25,8 +25,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -161,6 +164,7 @@ fun AppShell() {
         mutableStateOf(prefs.getBoolean("auto_scan", true))
     }
     var vaultUnlocked by remember { mutableStateOf(false) }
+    var pendingVaultAction by remember { mutableStateOf<ShotlistAction?>(null) }
     val activity = context as? FragmentActivity
     val biometricPrompt = remember(activity) {
         activity?.let {
@@ -205,6 +209,9 @@ fun AppShell() {
     val actions = remember(findings) {
         findings.map { it.toShotlistAction() }
     }
+    val vaultedFindingIds = remember(vaultedFindings) {
+        vaultedFindings.mapTo(mutableSetOf()) { it.id }
+    }
     val accessLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
@@ -220,6 +227,32 @@ fun AppShell() {
         action.findingId ?: return
         scope.launch {
             db.findings().setState(action.findingId, state)
+        }
+    }
+
+    fun performAction(action: ShotlistAction) {
+        successMessage = "Done — nice catch"
+        when (action.kind) {
+            ActionKind.Event, ActionKind.Deadline -> {
+                context.startActivity(ShotlistActions.calendarInsertIntent(action))
+                setState(action, "ACCEPTED")
+            }
+            ActionKind.Code -> {
+                ShotlistActions.copyCode(context, action)
+                setState(action, "ACCEPTED")
+            }
+            ActionKind.Place -> {
+                ShotlistActions.mapSearchIntent(action)?.let(context::startActivity)
+                setState(action, "ACCEPTED")
+            }
+            ActionKind.Product, ActionKind.Recipe, ActionKind.Noise -> setState(action, "ACCEPTED")
+        }
+    }
+
+    LaunchedEffect(vaultUnlocked) {
+        if (vaultUnlocked) {
+            pendingVaultAction?.let(::performAction)
+            pendingVaultAction = null
         }
     }
 
@@ -255,6 +288,8 @@ fun AppShell() {
                 when (tab) {
                     Tab.Inbox -> InboxScreen(
                         actions = actions,
+                        vaultedFindingIds = vaultedFindingIds,
+                        vaultUnlocked = vaultUnlocked,
                         scannedCount = shotCount,
                         hasScreenshotAccess = imageAccessGranted,
                         hazeState = hazeState,
@@ -271,21 +306,23 @@ fun AppShell() {
                         },
                         onAccept = { action ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            successMessage = "Done — nice catch"
-                            when (action.kind) {
-                                ActionKind.Event, ActionKind.Deadline -> {
-                                    context.startActivity(ShotlistActions.calendarInsertIntent(action))
-                                    setState(action, "ACCEPTED")
-                                }
-                                ActionKind.Code -> {
-                                    ShotlistActions.copyCode(context, action)
-                                    setState(action, "ACCEPTED")
-                                }
-                                ActionKind.Place -> {
-                                    ShotlistActions.mapSearchIntent(action)?.let(context::startActivity)
-                                    setState(action, "ACCEPTED")
-                                }
-                                ActionKind.Product, ActionKind.Recipe, ActionKind.Noise -> setState(action, "ACCEPTED")
+                            if (action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked) {
+                                pendingVaultAction = action
+                                biometricPrompt?.authenticate(vaultPromptInfo)
+                                    ?: run {
+                                        pendingVaultAction = null
+                                        successMessage = "Vault unlock is unavailable"
+                                    }
+                            } else {
+                                performAction(action)
+                            }
+                        },
+                        onVault = { action ->
+                            action.findingId?.let { id ->
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch { db.findings().setVaulted(id, true) }
+                                vaultUnlocked = false
+                                successMessage = "Locked in your vault"
                             }
                         },
                         onSnooze = {
@@ -328,6 +365,14 @@ fun AppShell() {
                         onCopyVaulted = { finding ->
                             ShotlistActions.copyCode(context, finding.toShotlistAction())
                             successMessage = "Copied privately"
+                        },
+                        onUnvault = { finding ->
+                            scope.launch { db.findings().setVaulted(finding.id, false) }
+                            successMessage = "Moved back to your inbox"
+                        },
+                        onReplayOnboarding = {
+                            prefs.edit().putBoolean("complete", false).apply()
+                            onboardingComplete = false
                         },
                         onShareBugReport = {
                             context.startActivity(Diag.shareIntent(context))
@@ -422,11 +467,14 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
 @Composable
 private fun InboxScreen(
     actions: List<ShotlistAction>,
+    vaultedFindingIds: Set<Long>,
+    vaultUnlocked: Boolean,
     scannedCount: Int,
     hasScreenshotAccess: Boolean,
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
     onAccept: (ShotlistAction) -> Unit,
+    onVault: (ShotlistAction) -> Unit,
     onSnooze: (ShotlistAction) -> Unit,
     onDismiss: (ShotlistAction) -> Unit,
 ) {
@@ -465,8 +513,10 @@ private fun InboxScreen(
             items(actions, key = { it.id }) { action ->
                 ActionCard(
                     action = action,
+                    locked = action.findingId?.let(vaultedFindingIds::contains) == true && !vaultUnlocked,
                     hazeState = hazeState,
                     onAccept = { onAccept(action) },
+                    onVault = { onVault(action) },
                     onSnooze = { onSnooze(action) },
                     onDismiss = { onDismiss(action) },
                 )
@@ -722,12 +772,14 @@ private fun StatPill(text: String, color: Color) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ActionCard(
     action: ShotlistAction,
+    locked: Boolean,
     hazeState: dev.chrisbanes.haze.HazeState,
     onAccept: () -> Unit,
+    onVault: () -> Unit,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -770,15 +822,37 @@ private fun ActionCard(
             cornerRadius = 30.dp,
             contentPadding = PaddingValues(16.dp),
             accent = accent,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onVault,
+                ),
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 KindIcon(action.kind, accent)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (locked) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "Private find",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    } else {
+                        Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
                     Text(
-                        action.detail,
+                        if (locked) "Locked until you verify it’s you." else action.detail,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                         maxLines = 2,
@@ -799,7 +873,7 @@ private fun ActionCard(
                                 contentColor = accent,
                             ),
                         ) {
-                            Text(primaryCta(action.kind), fontSize = 14.sp)
+                            Text(if (locked) "Unlock" else primaryCta(action.kind), fontSize = 14.sp)
                         }
                     }
                 }

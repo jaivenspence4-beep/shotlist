@@ -156,7 +156,12 @@ fun TrackScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Habits", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        "Habits",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Text(
                         "Tiny wins count.",
                         style = MaterialTheme.typography.bodySmall,

@@ -7,6 +7,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,8 @@ fun YouScreen(
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
     onCopyVaulted: (Finding) -> Unit,
+    onUnvault: (Finding) -> Unit,
+    onReplayOnboarding: () -> Unit,
     onShareBugReport: () -> Unit,
     onDeleteAllData: () -> Unit,
     modifier: Modifier = Modifier,
@@ -163,6 +167,10 @@ fun YouScreen(
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCopyVaulted(finding)
                         },
+                        onUnvault = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onUnvault(finding)
+                        },
                     )
                 }
             }
@@ -251,6 +259,20 @@ fun YouScreen(
                     color = Color.White.copy(alpha = 0.08f),
                 )
                 ActionRow(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "Replay the welcome",
+                    detail = "See the three-tap setup again",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onReplayOnboarding()
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
+                ActionRow(
                     icon = Icons.Outlined.DeleteForever,
                     title = "Delete all my data",
                     detail = "Screenshots, finds, tracking, habits — everything",
@@ -292,11 +314,13 @@ fun YouScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VaultFindingCard(
     hazeState: HazeState,
     finding: Finding,
     onCopy: () -> Unit,
+    onUnvault: () -> Unit,
 ) {
     GlassPanel(
         hazeState = hazeState,
@@ -305,7 +329,10 @@ private fun VaultFindingCard(
         accent = MaterialTheme.colorScheme.tertiary,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onCopy),
+            .combinedClickable(
+                onClick = onCopy,
+                onLongClick = onUnvault,
+            ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
