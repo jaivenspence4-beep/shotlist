@@ -17,13 +17,10 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Column
-import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -103,17 +100,13 @@ private fun NextUpContent(context: Context, snapshot: WidgetSnapshot) {
         snapshot.nextFindingId?.let { putExtra(ShotlistActions.EXTRA_FINDING_ID, it) }
         data = Uri.parse("shotlist://widget/next/${snapshot.nextFindingId ?: 0}")
     }
-    Row(
-        modifier = widgetModifier.clickable(actionStartActivity(openNext)),
+    Column(
+        modifier = widgetModifier().clickable(actionStartActivity(openNext)),
     ) {
-        Column(modifier = GlanceModifier.defaultWeight()) {
-            Text("NEXT UP", style = widgetText(10.sp, periwinkle, FontWeight.Bold))
-            Spacer(GlanceModifier.height(3.dp))
-            Text(snapshot.nextTitle, style = widgetText(17.sp, primary, FontWeight.Bold), maxLines = 1)
-            Text(snapshot.nextWhen, style = widgetText(12.sp, muted, FontWeight.Normal), maxLines = 1)
-        }
-        Spacer(GlanceModifier.width(10.dp))
-        Text("✦", style = widgetText(22.sp, aqua, FontWeight.Bold))
+        Text("✦  NEXT UP", style = widgetText(10.sp, periwinkle, FontWeight.Bold))
+        Spacer(GlanceModifier.height(3.dp))
+        Text(snapshot.nextTitle, style = widgetText(17.sp, primary, FontWeight.Bold), maxLines = 1)
+        Text(snapshot.nextWhen, style = widgetText(12.sp, muted, FontWeight.Normal), maxLines = 1)
     }
 }
 
@@ -123,7 +116,7 @@ private fun StreakContent(context: Context, snapshot: WidgetSnapshot) {
         .putExtra(MainActivity.EXTRA_TARGET_TAB, "track")
         .setData(Uri.parse("shotlist://widget/track"))
     Column(
-        modifier = widgetModifier.clickable(actionStartActivity(openTrack)),
+        modifier = widgetModifier().clickable(actionStartActivity(openTrack)),
     ) {
         Text("🔥", style = widgetText(18.sp, primary, FontWeight.Normal))
         Spacer(GlanceModifier.height(2.dp))
@@ -142,7 +135,7 @@ private fun VaultContent(context: Context, snapshot: WidgetSnapshot) {
         .putExtra(MainActivity.EXTRA_OPEN_VAULT, true)
         .setData(Uri.parse("shotlist://widget/vault"))
     Column(
-        modifier = widgetModifier.clickable(actionStartActivity(openVault)),
+        modifier = widgetModifier().clickable(actionStartActivity(openVault)),
     ) {
         Text("🔐", style = widgetText(18.sp, primary, FontWeight.Normal))
         Spacer(GlanceModifier.height(2.dp))
@@ -151,7 +144,7 @@ private fun VaultContent(context: Context, snapshot: WidgetSnapshot) {
     }
 }
 
-private val widgetModifier = GlanceModifier
+private fun widgetModifier() = GlanceModifier
     .fillMaxSize()
     .background(widgetBackground)
     .cornerRadius(24.dp)
@@ -179,12 +172,11 @@ private fun streakFor(habitId: Long, ticks: List<HabitTick>, today: Long): Int {
     return streak
 }
 
-private fun colors(day: Long, night: Long) = ColorProvider(Color(day), Color(night))
+private fun color(value: Long) = ColorProvider(Color(value))
 
-private val widgetBackground = colors(0xFFF1F3FF, 0xFF10162B)
-private val primary = colors(0xFF11162A, 0xFFF7F8FF)
-private val muted = colors(0xFF5E6579, 0xFFB8BED1)
-private val aqua = colors(0xFF007F6D, 0xFF7EF5D8)
-private val periwinkle = colors(0xFF485ED0, 0xFFAAB8FF)
-private val amber = colors(0xFFA65D00, 0xFFFFBE63)
-private val pink = colors(0xFFA62E70, 0xFFFF79C9)
+private val widgetBackground = color(0xFF10162B)
+private val primary = color(0xFFF7F8FF)
+private val muted = color(0xFFB8BED1)
+private val periwinkle = color(0xFFAAB8FF)
+private val amber = color(0xFFFFBE63)
+private val pink = color(0xFFFF79C9)
