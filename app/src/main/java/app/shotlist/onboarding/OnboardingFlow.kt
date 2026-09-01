@@ -1,0 +1,304 @@
+package app.shotlist.onboarding
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.ImageSearch
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import app.shotlist.data.ShotlistDb
+import app.shotlist.engine.EngineApi
+import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.ui.glass.glassBackgroundBrush
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+
+@Composable
+fun OnboardingFlow(
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val hazeState = rememberHazeState()
+    val db = remember(context) { ShotlistDb.get(context) }
+    val screenshotsRead by db.shots().count().collectAsState(initial = 0)
+    val suggestedActions by db.findings().suggestedCount().collectAsState(initial = 0)
+    val reveal = OnboardingReveal(screenshotsRead, suggestedActions)
+    var step by rememberSaveable {
+        mutableStateOf(
+            if (hasImagePermission(context)) PermissionStep.Scanning else PermissionStep.Intro,
+        )
+    }
+    var backfillStarted by rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val granted = requiredImagePermissions().all { result[it] == true || hasPermission(context, it) }
+        step = if (granted) PermissionStep.Scanning else PermissionStep.Denied
+    }
+
+    LaunchedEffect(step) {
+        if (step == PermissionStep.Scanning && !backfillStarted) {
+            backfillStarted = true
+            EngineApi.backfill(context, limit = 100)
+            EngineApi.startObserving(context)
+        }
+    }
+
+    LaunchedEffect(step, screenshotsRead, suggestedActions) {
+        if (step == PermissionStep.Scanning && screenshotsRead > 0) {
+            step = PermissionStep.Ready
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(glassBackgroundBrush())
+            .hazeSource(hazeState)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(targetState = step, label = "onboarding-step") { currentStep ->
+            when (currentStep) {
+                PermissionStep.Intro -> IntroStep(
+                    onContinue = {
+                        step = PermissionStep.Requesting
+                        permissionLauncher.launch(requiredOnboardingPermissions().toTypedArray())
+                    },
+                    onShareOnly = onFinished,
+                    hazeState = hazeState,
+                )
+                PermissionStep.Requesting -> ProgressStep(
+                    title = "Waiting for permission",
+                    detail = "Android is asking for screenshot access now.",
+                    reveal = reveal,
+                    hazeState = hazeState,
+                )
+                PermissionStep.Scanning -> ProgressStep(
+                    title = "Reading your screenshot graveyard",
+                    detail = "OCR is running locally. Useful events, deadlines, and codes will appear as they are found.",
+                    reveal = reveal,
+                    hazeState = hazeState,
+                )
+                PermissionStep.Ready -> ReadyStep(
+                    reveal = reveal,
+                    onFinished = onFinished,
+                    hazeState = hazeState,
+                )
+                PermissionStep.Denied -> DeniedStep(
+                    onRetry = {
+                        step = PermissionStep.Requesting
+                        permissionLauncher.launch(requiredOnboardingPermissions().toTypedArray())
+                    },
+                    onShareOnly = onFinished,
+                    hazeState = hazeState,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntroStep(
+    onContinue: () -> Unit,
+    onShareOnly: () -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState,
+) {
+    GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.ImageSearch, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(18.dp))
+        Text("Find the stuff you forgot", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Shotlist scans screenshots already on your phone, then turns flyers, deadlines, codes, and tickets into review cards.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+        )
+        Spacer(Modifier.height(18.dp))
+        PrivacyBullets()
+        Spacer(Modifier.height(22.dp))
+        FilledTonalButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
+            Text("Scan my screenshots")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onShareOnly, modifier = Modifier.fillMaxWidth()) {
+            Text("Use share sheet only")
+        }
+    }
+}
+
+@Composable
+private fun ProgressStep(
+    title: String,
+    detail: String,
+    reveal: OnboardingReveal,
+    hazeState: dev.chrisbanes.haze.HazeState,
+) {
+    GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(18.dp))
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(8.dp))
+        Text(detail, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+        Spacer(Modifier.height(20.dp))
+        RevealRow(reveal)
+        AnimatedVisibility(visible = reveal.hasWowMoment, enter = fadeIn(), exit = fadeOut()) {
+            Column {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "The first useful finds are already flowing into Inbox.",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadyStep(
+    reveal: OnboardingReveal,
+    onFinished: () -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState,
+) {
+    GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(18.dp))
+        Text("Your Inbox is alive", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Shotlist will keep watching new screenshots and only nudge when it sees something time-bound or useful.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+        )
+        Spacer(Modifier.height(18.dp))
+        RevealRow(reveal)
+        Spacer(Modifier.height(22.dp))
+        FilledTonalButton(onClick = onFinished, modifier = Modifier.fillMaxWidth()) {
+            Text("Open Inbox")
+        }
+    }
+}
+
+@Composable
+private fun DeniedStep(
+    onRetry: () -> Unit,
+    onShareOnly: () -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState,
+) {
+    GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(18.dp))
+        Text("Screenshot access is off", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Automatic backfill needs image access. You can retry, or use the store-safe share-sheet mode.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
+        )
+        Spacer(Modifier.height(22.dp))
+        FilledTonalButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+            Text("Try permission again")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onShareOnly, modifier = Modifier.fillMaxWidth()) {
+            Text("Continue with share sheet")
+        }
+    }
+}
+
+@Composable
+private fun PrivacyBullets() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        PrivacyBullet(icon = Icons.Outlined.CloudOff, text = "OCR runs on-device. No cloud calls in v1.")
+        PrivacyBullet(icon = Icons.Outlined.Security, text = "Calendar entries happen only after your tap.")
+        PrivacyBullet(icon = Icons.Outlined.NotificationsActive, text = "New screenshots can become useful reminders.")
+    }
+}
+
+@Composable
+private fun PrivacyBullet(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f))
+    }
+}
+
+@Composable
+private fun RevealRow(reveal: OnboardingReveal) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AssistChip(onClick = { }, label = { Text("${reveal.screenshotsRead} read") })
+        AssistChip(onClick = { }, label = { Text("${reveal.suggestedActions} useful") })
+        AssistChip(onClick = { }, label = { Text("0 bytes uploaded") })
+    }
+}
+
+private fun requiredOnboardingPermissions(): List<String> =
+    buildList {
+        addAll(requiredImagePermissions())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+private fun requiredImagePermissions(): List<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        listOf(Manifest.permission.READ_MEDIA_IMAGES)
+    } else {
+        listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+private fun hasImagePermission(context: Context): Boolean =
+    requiredImagePermissions().all { hasPermission(context, it) }
+
+private fun hasPermission(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
