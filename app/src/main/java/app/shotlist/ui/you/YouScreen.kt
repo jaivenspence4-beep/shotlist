@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -78,6 +79,7 @@ fun YouScreen(
     orbStyle: OrbStyle,
     onPaletteChanged: (ShotlistPalette) -> Unit,
     onOrbStyleChanged: (OrbStyle) -> Unit,
+    onOpenShatter: () -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
     onCopyVaulted: (Finding) -> Unit,
@@ -299,6 +301,20 @@ fun YouScreen(
                                 onAutoScanChanged(it)
                             },
                         )
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
+                ActionRow(
+                    icon = Icons.Outlined.AutoDelete,
+                    title = "Shatter dead screenshots",
+                    detail = "Flick through safe-to-trash clutter",
+                    accent = MaterialTheme.colorScheme.tertiary,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOpenShatter()
                     },
                 )
                 HorizontalDivider(

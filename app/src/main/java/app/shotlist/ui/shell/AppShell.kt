@@ -118,6 +118,7 @@ import app.shotlist.ui.glass.GlassBackdrop
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.recall.RecallScreen
+import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
 import app.shotlist.ui.share.ShareCardGenerator
 import app.shotlist.ui.theme.OrbStyle
@@ -222,6 +223,7 @@ private fun AppShellContent(
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var recallOpen by rememberSaveable { mutableStateOf(false) }
+    var shatterOpen by rememberSaveable { mutableStateOf(false) }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
     var autoScanEnabled by rememberSaveable {
@@ -286,7 +288,10 @@ private fun AppShellContent(
         findings.map { it.toShotlistAction() }
     }
     LaunchedEffect(deepLinkSerial) {
-        if (deepLinkSerial > 0) recallOpen = false
+        if (deepLinkSerial > 0) {
+            recallOpen = false
+            shatterOpen = false
+        }
         selected = when (requestedTab) {
             "inbox" -> Tab.Inbox.ordinal
             "scan" -> Tab.Scan.ordinal
@@ -399,14 +404,21 @@ private fun AppShellContent(
             TopGlassBar(
                 hazeState = hazeState,
                 dailyStreak = dailyStreak,
-                recallOpen = recallOpen,
+                recallOpen = recallOpen || shatterOpen,
                 onRecall = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    shatterOpen = false
                     recallOpen = true
                 },
             )
             Spacer(Modifier.height(16.dp))
-            if (recallOpen) {
+            if (shatterOpen) {
+                ShatterScreen(
+                    hazeState = hazeState,
+                    onClose = { shatterOpen = false },
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (recallOpen) {
                 RecallScreen(
                     hazeState = hazeState,
                     vaultUnlocked = vaultUnlocked,
@@ -528,6 +540,10 @@ private fun AppShellContent(
                         orbStyle = orbStyle,
                         onPaletteChanged = onPaletteChanged,
                         onOrbStyleChanged = onOrbStyleChanged,
+                        onOpenShatter = {
+                            recallOpen = false
+                            shatterOpen = true
+                        },
                         onAutoScanChanged = { enabled ->
                             autoScanEnabled = enabled
                             prefs.edit().putBoolean("auto_scan", enabled).apply()
@@ -578,6 +594,7 @@ private fun AppShellContent(
                 selected = selected,
                 onSelected = {
                     recallOpen = false
+                    shatterOpen = false
                     if (selected != it) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selected = it

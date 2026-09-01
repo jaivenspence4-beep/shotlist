@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -43,6 +44,47 @@ interface ShotDao {
             "ORDER BY shots.takenAt DESC LIMIT 40"
     )
     fun recall(matchQuery: String): Flow<List<RecallHit>>
+
+    /**
+     * A candidate is safe only when no finding on the screenshot was ever
+     * accepted or vaulted, and every remaining meaning is dismissed/expired.
+     * App-private scan captures are excluded: Android's trash confirmation can
+     * only act on real MediaStore content URIs.
+     */
+    @Query(
+        "SELECT shots.id AS shotId, shots.uri AS uri, shots.takenAt AS takenAt, " +
+            "CASE WHEN shots.status = 'IGNORED' THEN 'No useful text found' " +
+            "WHEN EXISTS (SELECT 1 FROM findings AS dismissed WHERE dismissed.shotId = shots.id " +
+            "AND dismissed.state = 'DISMISSED') THEN 'Everything here was dismissed' " +
+            "ELSE 'The plans here have expired' END AS reason " +
+            "FROM shots WHERE shots.uri LIKE 'content://media/%' " +
+            "AND NOT EXISTS (SELECT 1 FROM findings AS protected WHERE protected.shotId = shots.id " +
+            "AND (protected.vaulted = 1 OR protected.state = 'ACCEPTED')) " +
+            "AND NOT EXISTS (SELECT 1 FROM findings AS live WHERE live.shotId = shots.id " +
+            "AND live.state != 'DISMISSED' AND NOT (" +
+            "live.type IN ('EVENT', 'DEADLINE') AND live.whenAt IS NOT NULL AND live.whenAt < :now" +
+            ")) AND (shots.status = 'IGNORED' OR " +
+            "EXISTS (SELECT 1 FROM findings AS anyFinding WHERE anyFinding.shotId = shots.id)) " +
+            "ORDER BY shots.takenAt DESC LIMIT 120"
+    )
+    suspend fun purgeCandidates(now: Long = System.currentTimeMillis()): List<PurgeCandidate>
+
+    @Query("DELETE FROM scans WHERE shotId IN (:shotIds)")
+    suspend fun deleteScansForShots(shotIds: List<Long>)
+
+    @Query("DELETE FROM findings WHERE shotId IN (:shotIds)")
+    suspend fun deleteFindingsForShots(shotIds: List<Long>)
+
+    @Query("DELETE FROM shots WHERE id IN (:shotIds)")
+    suspend fun deleteShotsById(shotIds: List<Long>)
+
+    @Transaction
+    suspend fun forgetTrashedShots(shotIds: List<Long>) {
+        if (shotIds.isEmpty()) return
+        deleteScansForShots(shotIds)
+        deleteFindingsForShots(shotIds)
+        deleteShotsById(shotIds)
+    }
 
     /** After a suggestion purge, shots with nothing left re-enter the pipeline. */
     @Query("DELETE FROM shots WHERE id NOT IN (SELECT shotId FROM findings)")
