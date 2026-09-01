@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -54,9 +55,9 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.WifiPassword
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -305,7 +306,7 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
     GlassPanel(
         hazeState = hazeState,
         cornerRadius = 30.dp,
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -314,12 +315,20 @@ private fun TopGlassBar(hazeState: dev.chrisbanes.haze.HazeState) {
             Column(Modifier.weight(1f)) {
                 Text("Shotlist", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
                 Text(
-                    "Your screenshots become things that happen.",
+                    "Screenshots in. Life out.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
             }
-            Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
+            Text(
+                "LOCAL",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+            )
         }
     }
 }
@@ -386,23 +395,100 @@ private fun HeroCard(
     actionCount: Int,
     hazeState: dev.chrisbanes.haze.HazeState,
 ) {
-    val displayCount by animateIntAsState(
+    val displayActionCount by animateIntAsState(
+        targetValue = actionCount,
+        animationSpec = tween(durationMillis = 650),
+        label = "action-count",
+    )
+    val displayScannedCount by animateIntAsState(
         targetValue = scannedCount,
         animationSpec = tween(durationMillis = 700),
         label = "hero-count",
     )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(158.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        GlassPanel(
+            hazeState = hazeState,
+            cornerRadius = 30.dp,
+            contentPadding = PaddingValues(15.dp),
+            accent = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier
+                .weight(1.08f)
+                .fillMaxHeight(),
+        ) {
+            Icon(
+                Icons.Outlined.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                displayActionCount.toString(),
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 44.sp, lineHeight = 46.sp),
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Text(
+                "ready for you",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(0.92f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MiniMetric(
+                value = displayScannedCount.toString(),
+                label = "screenshots checked",
+                accent = MaterialTheme.colorScheme.primary,
+                hazeState = hazeState,
+                modifier = Modifier.weight(1f),
+            )
+            MiniMetric(
+                value = "100%",
+                label = "on your phone",
+                accent = MaterialTheme.colorScheme.secondary,
+                hazeState = hazeState,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniMetric(
+    value: String,
+    label: String,
+    accent: Color,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    modifier: Modifier = Modifier,
+) {
     GlassPanel(
         hazeState = hazeState,
-        cornerRadius = 36.dp,
-        contentPadding = PaddingValues(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 24.dp,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+        accent = accent,
+        modifier = modifier.fillMaxWidth(),
     ) {
-        ScreenshotCount(displayCount)
-        Spacer(Modifier.height(8.dp))
         Text(
-            "Found $actionCount useful thing${if (actionCount == 1) "" else "s"} hiding in plain sight.",
-            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 22.sp),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = accent,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+            maxLines = 1,
         )
     }
 }
@@ -423,6 +509,7 @@ private fun EmptyInboxCard(
         hazeState = hazeState,
         cornerRadius = 34.dp,
         contentPadding = PaddingValues(16.dp),
+        accent = MaterialTheme.colorScheme.tertiary,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -436,7 +523,7 @@ private fun EmptyInboxCard(
             }
             Spacer(Modifier.width(10.dp))
             Text(
-                "Inbox, meet magic",
+                "Screenshot. Forget. Done.",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -446,9 +533,9 @@ private fun EmptyInboxCard(
         Spacer(Modifier.height(8.dp))
         Text(
             if (hasScreenshotAccess) {
-                "All clear for now. Scan again, or take a screenshot and let Shotlist catch the useful part."
+                "All clear. Take a screenshot and Shotlist will catch the useful part for you."
             } else {
-                "Give Shotlist access once. Dates, codes, and plans become taps instead of scavenger hunts."
+                "Give access once. Dates, codes, and plans become taps instead of scavenger hunts."
             },
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
@@ -558,6 +645,7 @@ private fun ActionCard(
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val accent = actionColor(action.kind)
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value != SwipeToDismissBoxValue.Settled) onDismiss()
@@ -574,7 +662,7 @@ private fun ActionCard(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-                    Text("Done", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("Done", color = accent, fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -583,10 +671,11 @@ private fun ActionCard(
             hazeState = hazeState,
             cornerRadius = 30.dp,
             contentPadding = PaddingValues(16.dp),
+            accent = accent,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Row(verticalAlignment = Alignment.Top) {
-                KindIcon(action.kind)
+                KindIcon(action.kind, accent)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(action.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -599,13 +688,19 @@ private fun ActionCard(
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "${(action.confidence * 100).toInt()}% · ${action.source}",
+                        "${kindLabel(action.kind)} · ${action.source}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.82f),
+                        color = accent.copy(alpha = 0.92f),
                     )
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = onAccept) {
+                        FilledTonalButton(
+                            onClick = onAccept,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = accent.copy(alpha = 0.20f),
+                                contentColor = accent,
+                            ),
+                        ) {
                             Text(primaryCta(action.kind), fontSize = 14.sp)
                         }
                         OutlinedButton(onClick = onSnooze) {
@@ -619,7 +714,7 @@ private fun ActionCard(
 }
 
 @Composable
-private fun KindIcon(kind: ActionKind) {
+private fun KindIcon(kind: ActionKind, accent: Color) {
     val icon = when (kind) {
         ActionKind.Event, ActionKind.Deadline -> Icons.Outlined.CalendarMonth
         ActionKind.Product -> Icons.Outlined.ShoppingBag
@@ -631,11 +726,31 @@ private fun KindIcon(kind: ActionKind) {
     Box(
         modifier = Modifier
             .size(40.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
+            .background(accent.copy(alpha = 0.18f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = null, tint = accent)
     }
+}
+
+private fun actionColor(kind: ActionKind): Color = when (kind) {
+    ActionKind.Event -> Color(0xFF8EAAFF)
+    ActionKind.Deadline -> Color(0xFFFFBE63)
+    ActionKind.Product -> Color(0xFFFF79C9)
+    ActionKind.Place -> Color(0xFF70F0D0)
+    ActionKind.Code -> Color(0xFF58D8FF)
+    ActionKind.Recipe -> Color(0xFFFF9D72)
+    ActionKind.Noise -> Color(0xFFB5BAD0)
+}
+
+private fun kindLabel(kind: ActionKind): String = when (kind) {
+    ActionKind.Event -> "Event"
+    ActionKind.Deadline -> "Deadline"
+    ActionKind.Product -> "Product"
+    ActionKind.Place -> "Place"
+    ActionKind.Code -> "Code"
+    ActionKind.Recipe -> "Recipe"
+    ActionKind.Noise -> "Saved"
 }
 
 private fun primaryCta(kind: ActionKind): String = when (kind) {
