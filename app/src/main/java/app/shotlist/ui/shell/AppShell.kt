@@ -747,6 +747,8 @@ private fun AppShellContent(
                         },
                         onDeleteAllData = {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // Privacy deletion is not an earned Inbox-zero moment.
+                            previousInboxSize = null
                             EngineApi.stopObserving()
                             WorkManager.getInstance(context).cancelAllWork()
                             scope.launch {

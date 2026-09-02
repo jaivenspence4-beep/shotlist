@@ -232,7 +232,8 @@ fun LevelUpBurst(
 ) {
     var lastLevel by rememberSaveable { mutableIntStateOf(level) }
     var celebratedLevel by rememberSaveable { mutableIntStateOf(0) }
-    var celebrationVisible by rememberSaveable { mutableStateOf(false) }
+    // A transient overlay must never restore as visible after activity/process recreation.
+    var celebrationVisible by remember { mutableStateOf(false) }
     val progress = remember { Animatable(1f) }
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(level) {
