@@ -67,7 +67,7 @@ object GlucoseStory {
     /**
      * "Sensor glucose" is a factual claim about interstitial readings; a
      * fingerstick app or an unlabelled writer earns only "glucose".
-     * No branch may ever produce "blood glucose".
+     * No branch may ever prefix the word with blood.
      */
     fun glucoseWord(samples: List<GlucoseSample>): String =
         if (samples.isNotEmpty() && samples.all { it.specimenSource == SpecimenSource.INTERSTITIAL_FLUID.name }) {
