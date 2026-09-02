@@ -26,7 +26,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.Context
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.LocalFireDepartment
@@ -69,6 +74,7 @@ import app.shotlist.data.Habit
 import app.shotlist.data.HabitTick
 import app.shotlist.data.ShotlistDb
 import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.ui.metabolic.SecureMetabolicSheet
 import app.shotlist.widget.ShotlistWidgets
 import dev.chrisbanes.haze.HazeState
 import java.time.LocalDate
@@ -80,6 +86,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun TrackScreen(
     hazeState: HazeState,
+    healthConnected: Boolean,
+    healthRecordCount: Int,
+    onOpenMetabolicLens: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -92,6 +101,10 @@ fun TrackScreen(
     val habits by db.habits().active().collectAsState(initial = emptyList())
     val ticks by db.habits().ticksSince(todayEpoch - 90).collectAsState(initial = emptyList())
     var showAddHabit by remember { mutableStateOf(false) }
+    val trackPrefs = remember(context) { context.getSharedPreferences("shotlist_track", Context.MODE_PRIVATE) }
+    var privateTrackerDismissed by remember { mutableStateOf(trackPrefs.getBoolean(PRIVATE_TRACKER_DISMISSED, false)) }
+    var showTrackerChooser by remember { mutableStateOf(false) }
+    val hasMetabolicLens = healthConnected || healthRecordCount > 0
     LaunchedEffect(habits, ticks) {
         ShotlistWidgets.updateAll(context)
     }
@@ -162,6 +175,32 @@ fun TrackScreen(
                 today = today,
                 entries = entries,
             )
+        }
+        if (hasMetabolicLens) {
+            item(key = "metabolic-lens") {
+                MetabolicLensEntry(
+                    hazeState = hazeState,
+                    onOpen = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenMetabolicLens()
+                    },
+                )
+            }
+        } else if (!privateTrackerDismissed) {
+            item(key = "private-tracker") {
+                PrivateTrackerCard(
+                    hazeState = hazeState,
+                    onChoose = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showTrackerChooser = true
+                    },
+                    onDismiss = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        trackPrefs.edit().putBoolean(PRIVATE_TRACKER_DISMISSED, true).apply()
+                        privateTrackerDismissed = true
+                    },
+                )
+            }
         }
         item {
             Row(
@@ -278,6 +317,17 @@ fun TrackScreen(
                 )
             }
         }
+    }
+
+    if (showTrackerChooser) {
+        TrackerChooserSheet(
+            onPick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                showTrackerChooser = false
+                onOpenMetabolicLens()
+            },
+            onDismissRequest = { showTrackerChooser = false },
+        )
     }
 
     if (showAddHabit) {
@@ -624,4 +674,97 @@ private fun streakFor(habitId: Long, ticks: List<HabitTick>, today: Long): Int {
         day -= 1
     }
     return streak
+}
+
+private const val PRIVATE_TRACKER_DISMISSED = "private_tracker_dismissed"
+
+@Composable
+private fun MetabolicLensEntry(hazeState: HazeState, onOpen: () -> Unit) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 30.dp,
+        contentPadding = PaddingValues(16.dp),
+        accent = Color(0xFF7BE0C3),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Open Metabolic Lens", onClick = onOpen),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.ShowChart, contentDescription = null, tint = Color(0xFF7BE0C3))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Metabolic Lens", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(
+                    "Stored on this phone unless you export it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+        }
+    }
+}
+
+/** One generic, dismissible invitation; the chooser names the modules. */
+@Composable
+private fun PrivateTrackerCard(hazeState: HazeState, onChoose: () -> Unit, onDismiss: () -> Unit) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 30.dp,
+        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 16.dp),
+        accent = Color(0xFF7BE0C3),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Choose a private tracker", onClick = onChoose),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(top = 8.dp)) {
+                Text("Add a private tracker", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(
+                    "Health signals read locally, with sharing only when you choose.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Outlined.Close, contentDescription = "Not now")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackerChooserSheet(onPick: () -> Unit, onDismissRequest: () -> Unit) {
+    SecureMetabolicSheet(onDismissRequest = onDismissRequest) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Text("Private trackers", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(
+                "Read-only and stored on this phone unless you export it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .clickable(onClickLabel = "Set up Metabolic Lens", onClick = onPick)
+                    .padding(14.dp),
+            ) {
+                Icon(Icons.Outlined.ShowChart, contentDescription = null, tint = Color(0xFF7BE0C3))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Metabolic Lens", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Glucose from Health Connect, as a story you can read. Free.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                    )
+                }
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
 }

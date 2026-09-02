@@ -127,6 +127,7 @@ import app.shotlist.data.ShotlistDb
 import app.shotlist.health.android.HealthConnectGateway
 import app.shotlist.health.api.GlucoseSync
 import app.shotlist.health.api.RoomGlucoseStore
+import app.shotlist.ui.metabolic.MetabolicLensRoute
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.entitlement.Entitlement
@@ -270,6 +271,7 @@ private fun AppShellContent(
 
     val hazeState = remember { HazeState() }
     val db = remember(context) { ShotlistDb.get(context) }
+    val healthGateway = remember(context) { HealthConnectGateway(context) }
     val scope = rememberCoroutineScope()
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
     val findingHistory by db.findings().byTypes(wrappedFindingTypes).collectAsState(initial = emptyList())
@@ -291,6 +293,8 @@ private fun AppShellContent(
     val shotCount by db.shots().count().collectAsState(initial = 0)
     // Only a count crosses into the shell; health rows themselves never leave the module.
     val healthRecordCount by db.glucose().sampleCount().collectAsState(initial = 0)
+    var healthConnected by remember { mutableStateOf(false) }
+    var metabolicOpen by rememberSaveable { mutableStateOf(false) }
     // Recall temporarily replaces the tab subtree; keep each tab's saveable UI state
     // so returning does not feel like relaunching that tab.
     val tabStateHolder = rememberSaveableStateHolder()
@@ -373,9 +377,18 @@ private fun AppShellContent(
         }
     }
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    suspend fun refreshHealthConnection() {
+        healthConnected = runCatching { healthGateway.hasReadPermission() }.getOrDefault(false)
+    }
+    LaunchedEffect(metabolicOpen, healthGateway) {
+        if (!metabolicOpen) refreshHealthConnection()
+    }
+    DisposableEffect(lifecycleOwner, healthGateway) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) vaultUnlocked = false
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch { refreshHealthConnection() }
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -712,7 +725,12 @@ private fun AppShellContent(
                         },
                     )
                     Tab.Scan -> ScanScreen(hazeState = hazeState)
-                    Tab.Track -> TrackScreen(hazeState = hazeState)
+                    Tab.Track -> TrackScreen(
+                        hazeState = hazeState,
+                        healthConnected = healthConnected,
+                        healthRecordCount = healthRecordCount,
+                        onOpenMetabolicLens = { metabolicOpen = true },
+                    )
                     Tab.You -> YouScreen(
                         hazeState = hazeState,
                         screenshotsChecked = shotCount,
@@ -721,6 +739,7 @@ private fun AppShellContent(
                         vaultTotalCount = vaultedFindings.size,
                         vaultUnlocked = vaultUnlocked,
                         healthRecordCount = healthRecordCount,
+                        healthConnected = healthConnected,
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
                         palette = palette,
@@ -754,6 +773,11 @@ private fun AppShellContent(
                         onOpenShatter = {
                             recallOpen = false
                             shatterOpen = true
+                        },
+                        onOpenMetabolicLens = {
+                            recallOpen = false
+                            shatterOpen = false
+                            metabolicOpen = true
                         },
                         onAutoScanChanged = { enabled ->
                             autoScanEnabled = enabled
@@ -790,7 +814,7 @@ private fun AppShellContent(
                                 withContext(Dispatchers.IO) {
                                     // Health rows go first and Health Connect access is revoked
                                     // best-effort; a provider failure never keeps local data.
-                                    GlucoseSync(HealthConnectGateway(context), RoomGlucoseStore(db.glucose()))
+                                    GlucoseSync(healthGateway, RoomGlucoseStore(db.glucose()))
                                         .deleteEverything()
                                     db.clearAllTables()
                                     context.filesDir.resolve("shared").deleteRecursively()
@@ -798,7 +822,12 @@ private fun AppShellContent(
                                 }
                                 context.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
                                     .edit().clear().apply()
+                                context.getSharedPreferences("shotlist_track", Context.MODE_PRIVATE)
+                                    .edit().clear().apply()
+                                context.getSharedPreferences("health_connect_permission", Context.MODE_PRIVATE)
+                                    .edit().clear().apply()
                                 prefs.edit().clear().apply()
+                                refreshHealthConnection()
                                 entitlement = if (isDebugBuild) {
                                     Entitlement.FREE
                                 } else {
@@ -820,6 +849,7 @@ private fun AppShellContent(
                     recallOpen = false
                     shatterOpen = false
                     collectionsOpen = false
+                    metabolicOpen = false
                     if (selected != it) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selected = it
@@ -891,6 +921,22 @@ private fun AppShellContent(
                 },
                 onClose = { memoriesOpen = false },
             )
+        }
+        if (metabolicOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.96f))
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+            ) {
+                MetabolicLensRoute(
+                    hazeState = hazeState,
+                    onClose = { metabolicOpen = false },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         if (collectionsOpen) {
             Box(

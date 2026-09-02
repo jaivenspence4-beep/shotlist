@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.WifiPassword
 import androidx.compose.material3.AlertDialog
@@ -74,6 +75,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
 import app.shotlist.data.Finding
 import app.shotlist.data.ShotlistExport
 import app.shotlist.engine.IngestWorker
@@ -94,6 +97,7 @@ fun YouScreen(
     vaultTotalCount: Int,
     vaultUnlocked: Boolean,
     healthRecordCount: Int,
+    healthConnected: Boolean,
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
     palette: ShotlistPalette,
@@ -106,6 +110,7 @@ fun YouScreen(
     onShowProPreview: () -> Unit,
     onOpenCollections: () -> Unit,
     onOpenShatter: () -> Unit,
+    onOpenMetabolicLens: () -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
     onCopyVaulted: (Finding) -> Unit,
@@ -333,6 +338,39 @@ fun YouScreen(
                         tint = MaterialTheme.colorScheme.secondary,
                     )
                 }
+            }
+        }
+        item(key = "modules-header") {
+            Text(
+                "MODULES",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+            )
+        }
+        item(key = "modules") {
+            GlassPanel(
+                hazeState = hazeState,
+                cornerRadius = 30.dp,
+                contentPadding = PaddingValues(16.dp),
+                accent = Color(0xFF7BE0C3),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ActionRow(
+                    icon = Icons.Outlined.ShowChart,
+                    title = "Metabolic Lens",
+                    detail = when {
+                        healthConnected -> "Connected · stored locally unless you export"
+                        healthRecordCount > 0 -> "History kept on this phone · not connected"
+                        else -> "Glucose from Health Connect, read-only · free"
+                    },
+                    accent = Color(0xFF7BE0C3),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenMetabolicLens()
+                    },
+                )
             }
         }
         item {
@@ -665,6 +703,7 @@ fun YouScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
+            properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
             icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null) },
             title = { Text("Delete everything?") },
             text = {
@@ -703,6 +742,7 @@ fun YouScreen(
         val hasHealth = healthRecordCount > 0
         AlertDialog(
             onDismissRequest = { showPrivateExportDialog = false },
+            properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
             icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
             title = { Text(if (hasVault) "Include private vault values?" else "Export your data?") },
             text = {
@@ -771,6 +811,7 @@ fun YouScreen(
     if (showHealthGateDialog) {
         AlertDialog(
             onDismissRequest = { showHealthGateDialog = false },
+            properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
             icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
             title = { Text("Health data stays out") },
             text = {
@@ -809,6 +850,7 @@ fun YouScreen(
                 showHealthConfirmDialog = false
                 includeHealthInExport = false
             },
+            properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
             icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
             title = { Text("Include glucose readings?") },
             text = {
