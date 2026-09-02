@@ -170,15 +170,16 @@ object ShareCardGenerator {
         }
 
         val directory = File(context.cacheDir, "shared_cards").apply { mkdirs() }
-        // A share URI must stay valid while the chooser is open. Keep the four most
-        // recent variants and only prune genuinely old cards.
-        directory.listFiles()
-            ?.sortedByDescending { it.lastModified() }
-            ?.drop(4)
-            ?.forEach { it.delete() }
         val file = File(directory, fileName)
         FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 94, it) }
         bitmap.recycle()
+        // A share URI must stay valid while the chooser is open. Keep enough recent
+        // cards for two complete four-style rounds instead of deleting the previous
+        // card as soon as another chooser opens.
+        directory.listFiles()
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(8)
+            ?.forEach { it.delete() }
         return FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     }
 

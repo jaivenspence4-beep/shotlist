@@ -129,6 +129,8 @@ import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
 import app.shotlist.ui.share.ShareCardGenerator
+import app.shotlist.ui.share.ShareTemplate
+import app.shotlist.ui.share.ShareTemplatePickerSheet
 import app.shotlist.ui.theme.LivingScene
 import app.shotlist.ui.theme.ShotlistPalette
 import app.shotlist.ui.theme.ShotlistTheme
@@ -152,6 +154,17 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Scan("Scan", Icons.Outlined.CameraAlt),
     Track("Track", Icons.Outlined.CalendarMonth),
     You("You", Icons.Outlined.Person),
+}
+
+private sealed interface PendingShare {
+    data class FindingCard(val action: ShotlistAction) : PendingShare
+
+    data class WeeklyCard(
+        val found: Int,
+        val acted: Int,
+        val streak: Int,
+        val topType: String,
+    ) : PendingShare
 }
 
 @Composable
@@ -246,6 +259,7 @@ private fun AppShellContent(
         )
     }
     var proPreviewReason by remember { mutableStateOf<ProPreviewReason?>(null) }
+    var pendingShare by remember { mutableStateOf<PendingShare?>(null) }
     val visibleVaultedFindings = remember(vaultedFindings, entitlement) {
         entitlement.vaultItemLimit?.let { vaultedFindings.take(it) } ?: vaultedFindings
     }
@@ -585,14 +599,11 @@ private fun AppShellContent(
                         },
                         onShareWrapped = {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            context.startActivity(
-                                ShareCardGenerator.weeklyIntent(
-                                    context = context,
-                                    found = weeklyStats.found,
-                                    acted = weeklyStats.acted,
-                                    streak = dailyStreak,
-                                    topType = weeklyStats.topType,
-                                ),
+                            pendingShare = PendingShare.WeeklyCard(
+                                found = weeklyStats.found,
+                                acted = weeklyStats.acted,
+                                streak = dailyStreak,
+                                topType = weeklyStats.topType,
                             )
                         },
                         onOpenDetail = { action ->
@@ -771,7 +782,10 @@ private fun AppShellContent(
             },
             onShare = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                context.startActivity(ShareCardGenerator.findingIntent(context, action))
+                pendingShare = PendingShare.FindingCard(action)
+                // Avoid stacking two modal sheets; the share picker replaces detail.
+                detailFinding = null
+                detailShot = null
             },
             onVaultChanged = { vaulted ->
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -790,6 +804,32 @@ private fun AppShellContent(
                 detailFinding = null
                 detailShot = null
                 successMessage = "Cleared out"
+            },
+        )
+    }
+
+    pendingShare?.let { request ->
+        ShareTemplatePickerSheet(
+            initialTemplate = ShareCardGenerator.selectedTemplate(context),
+            onDismissRequest = { pendingShare = null },
+            onShare = { template: ShareTemplate ->
+                val intent = when (request) {
+                    is PendingShare.FindingCard -> ShareCardGenerator.findingIntent(
+                        context = context,
+                        action = request.action,
+                        template = template,
+                    )
+                    is PendingShare.WeeklyCard -> ShareCardGenerator.weeklyIntent(
+                        context = context,
+                        found = request.found,
+                        acted = request.acted,
+                        streak = request.streak,
+                        topType = request.topType,
+                        template = template,
+                    )
+                }
+                pendingShare = null
+                context.startActivity(intent)
             },
         )
     }
