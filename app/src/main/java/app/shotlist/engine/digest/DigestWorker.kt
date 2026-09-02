@@ -110,6 +110,7 @@ class DigestWorker(
                 .setStyle(style)
                 .setContentIntent(content)
                 .setAutoCancel(true)
+                .setVisibility(android.app.Notification.VISIBILITY_PRIVATE)
                 .build(),
         )
     }

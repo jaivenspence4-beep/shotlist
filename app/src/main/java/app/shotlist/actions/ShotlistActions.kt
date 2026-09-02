@@ -188,6 +188,7 @@ object ShotlistActions {
             .addAction(R.drawable.ic_stat_shotlist, "Dismiss", dismissIntent)
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
             .build()
     }
 
