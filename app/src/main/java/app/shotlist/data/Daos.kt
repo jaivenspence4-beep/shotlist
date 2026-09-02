@@ -157,6 +157,15 @@ interface FindingDao {
     )
     suspend fun dueBetween(from: Long, until: Long): List<Finding>
 
+    /** Deadlines only, windowed — SQL-side type filter so LIMIT can't crowd
+     *  deadlines out with events (t70 review catch). */
+    @Query(
+        "SELECT * FROM findings WHERE state IN ('ACCEPTED','SUGGESTED') " +
+            "AND type = 'DEADLINE' AND whenAt IS NOT NULL " +
+            "AND whenAt BETWEEN :from AND :until ORDER BY whenAt ASC LIMIT 4"
+    )
+    suspend fun deadlinesBetween(from: Long, until: Long): List<Finding>
+
     // --- Vault ---
 
     @Query("SELECT * FROM findings WHERE vaulted = 1 AND state != 'DISMISSED' ORDER BY createdAt DESC")

@@ -49,8 +49,7 @@ class DigestWorker(
 
         val db = ShotlistDb.get(ctx)
         val dueToday = db.findings().dueBetween(now, endOfDay)
-        val expiringSoon = db.findings().dueBetween(endOfDay + 1, in48h)
-            .filter { it.type == "DEADLINE" }
+        val expiringSoon = db.findings().deadlinesBetween(endOfDay + 1, in48h)
 
         if (dueToday.isEmpty() && expiringSoon.isEmpty()) return Result.success()
 
