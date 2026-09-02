@@ -12,8 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Shot::class, Finding::class, ShotFts::class,
         CycleEntry::class, Habit::class, HabitTick::class, Scan::class,
         SavedBoard::class, BoardPin::class,
+        GlucoseSample::class, GlucoseMoment::class, GlucoseSyncState::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class ShotlistDb : RoomDatabase() {
@@ -23,6 +24,7 @@ abstract class ShotlistDb : RoomDatabase() {
     abstract fun habits(): HabitDao
     abstract fun scans(): ScanDao
     abstract fun collections(): CollectionDao
+    abstract fun glucose(): GlucoseDao
 
     companion object {
         @Volatile private var instance: ShotlistDb? = null
@@ -116,6 +118,44 @@ abstract class ShotlistDb : RoomDatabase() {
             }
         }
 
+        /**
+         * Metabolic Lens is additive and isolated: three new tables, no
+         * foreign keys into shots/findings, nothing existing touched.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `glucose_samples` (" +
+                        "`sourcePackage` TEXT NOT NULL, `recordId` TEXT NOT NULL, " +
+                        "`observedAt` INTEGER NOT NULL, `zoneOffsetSeconds` INTEGER, " +
+                        "`mmolPerLiter` REAL NOT NULL, `specimenSource` TEXT NOT NULL, " +
+                        "`importedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`sourcePackage`, `recordId`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_glucose_samples_observedAt` " +
+                        "ON `glucose_samples` (`observedAt`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `glucose_moments` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`occurredAt` INTEGER NOT NULL, `kind` TEXT NOT NULL, " +
+                        "`note` TEXT, `createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_glucose_moments_occurredAt` " +
+                        "ON `glucose_moments` (`occurredAt`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `glucose_sync` (" +
+                        "`id` INTEGER NOT NULL, `selectedOrigin` TEXT, " +
+                        "`changesToken` TEXT, `lastSyncAt` INTEGER, " +
+                        "`paused` INTEGER NOT NULL, `displayUnit` TEXT, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
         fun get(context: Context): ShotlistDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -123,7 +163,7 @@ abstract class ShotlistDb : RoomDatabase() {
                     ShotlistDb::class.java,
                     "shotlist.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }
