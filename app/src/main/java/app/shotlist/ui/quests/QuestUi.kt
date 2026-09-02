@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.EmojiEvents
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -125,6 +128,7 @@ fun QuestLevelPill(
 fun DailyQuestsCard(
     dashboard: QuestDashboard,
     hazeState: HazeState,
+    onQuestClick: (DailyQuest) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     GlassPanel(
@@ -155,20 +159,39 @@ fun DailyQuestsCard(
             )
         }
         Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            dashboard.quests.forEach { progress -> QuestRow(progress) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            dashboard.quests.forEach { progress ->
+                QuestRow(
+                    progress = progress,
+                    onClick = { onQuestClick(progress.quest) },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun QuestRow(progress: QuestProgress) {
+private fun QuestRow(
+    progress: QuestProgress,
+    onClick: () -> Unit,
+) {
     val color = if (progress.complete) {
         MaterialTheme.colorScheme.secondary
     } else {
         MaterialTheme.colorScheme.primary
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                onClickLabel = questActionLabel(progress.quest),
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(vertical = 2.dp),
+    ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -309,4 +332,9 @@ private fun questIcon(quest: DailyQuest): ImageVector = when (quest) {
     DailyQuest.HANDLE_THREE -> Icons.Outlined.TaskAlt
     DailyQuest.SCAN_ONE -> Icons.Outlined.QrCodeScanner
     DailyQuest.CLEAR_INBOX -> Icons.Outlined.Inbox
+}
+
+private fun questActionLabel(quest: DailyQuest): String = when (quest) {
+    DailyQuest.HANDLE_THREE, DailyQuest.CLEAR_INBOX -> "Jump to your finds"
+    DailyQuest.SCAN_ONE -> "Open Scan"
 }

@@ -58,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +78,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -584,7 +586,9 @@ private fun CameraPermissionCard(
             cornerRadius = 34.dp,
             contentPadding = PaddingValues(20.dp),
             accent = MaterialTheme.colorScheme.tertiary,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Allow camera", role = Role.Button, onClick = onRequest),
         ) {
             Icon(
                 Icons.Outlined.CameraAlt,
@@ -726,24 +730,34 @@ private fun ResultSheet(
             }
         }
         if (success && mode == ScanMode.QR && barcodeResult != null) {
-            Text(
-                barcodeResult.title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-            )
-            Text(
-                barcodeResult.detail,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                if (barcodeResult.vaulted) "Saved behind biometric lock" else "Saved to your Inbox",
-                color = accent,
-                style = MaterialTheme.typography.labelMedium,
-            )
+            Column(
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = "Use this code", role = Role.Button) {
+                        onBarcodeAction(barcodeResult)
+                    },
+            ) {
+                Text(
+                    barcodeResult.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                )
+                Text(
+                    barcodeResult.detail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (barcodeResult.vaulted) "Saved behind biometric lock" else "Saved to your Inbox",
+                    color = accent,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
             barcodeResult.cta?.let { label ->
                 Spacer(Modifier.height(10.dp))
                 FilledTonalButton(
@@ -758,6 +772,13 @@ private fun ResultSheet(
                 "$documentPageCount ${if (documentPageCount == 1) "page" else "pages"} · cropped, cleaned, PDF-ready",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = "Share PDF", role = Role.Button) {
+                        onShareDocument(documentPdfUri)
+                    },
             )
             Spacer(Modifier.height(12.dp))
             FilledTonalButton(
@@ -796,6 +817,11 @@ private fun ResultSheet(
                 errorMessage,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = "Try again", role = Role.Button, onClick = onAgain),
             )
         }
     }

@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,11 +63,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -158,6 +161,14 @@ fun YouScreen(
                 hazeState = hazeState,
                 screenshotsChecked = screenshotsChecked,
                 thingsReady = thingsReady,
+                onOpen = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    showPrivacyPolicy = true
+                },
+                onOpenReady = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onOpenCollections()
+                },
             )
         }
         item {
@@ -170,7 +181,11 @@ fun YouScreen(
                     .fillMaxWidth()
                     .clickable {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (!vaultUnlocked) onOpenVault()
+                        if (vaultUnlocked && hiddenVaultCount > 0) {
+                            onShowProPreview()
+                        } else if (!vaultUnlocked) {
+                            onOpenVault()
+                        }
                     },
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -425,6 +440,15 @@ fun YouScreen(
                     title = "Watch new screenshots",
                     detail = if (imageAccessGranted) "Ready in the background" else "Photo access is off",
                     accent = MaterialTheme.colorScheme.primary,
+                    onClickLabel = "Toggle watching new screenshots",
+                    onClick = if (imageAccessGranted) {
+                        {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onAutoScanChanged(!autoScanEnabled)
+                        }
+                    } else {
+                        null
+                    },
                     trailing = {
                         Switch(
                             checked = autoScanEnabled && imageAccessGranted,
@@ -459,6 +483,11 @@ fun YouScreen(
                     title = "Network access",
                     detail = "Not requested by Shotlist",
                     accent = MaterialTheme.colorScheme.secondary,
+                    onClickLabel = "Read the privacy policy",
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showPrivacyPolicy = true
+                    },
                     trailing = {
                         Icon(
                             Icons.Outlined.CheckCircle,
@@ -501,6 +530,13 @@ fun YouScreen(
                         title = "Preview Pro tier",
                         detail = "UI preview only · billing is disconnected",
                         accent = MaterialTheme.colorScheme.tertiary,
+                        onClickLabel = "Toggle Pro preview",
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onEntitlementChanged(
+                                if (entitlement.isPro) Entitlement.FREE else Entitlement.PRO,
+                            )
+                        },
                         trailing = {
                             Switch(
                                 checked = entitlement.isPro,
@@ -766,6 +802,8 @@ private fun PrivacySeal(
     hazeState: HazeState,
     screenshotsChecked: Int,
     thingsReady: Int,
+    onOpen: () -> Unit,
+    onOpenReady: () -> Unit,
 ) {
     val transition = rememberInfiniteTransition(label = "privacy-pulse")
     val pulse by transition.animateFloat(
@@ -782,7 +820,9 @@ private fun PrivacySeal(
         cornerRadius = 34.dp,
         contentPadding = PaddingValues(18.dp),
         accent = MaterialTheme.colorScheme.secondary,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Read the privacy policy", role = Role.Button, onClick = onOpen),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -813,18 +853,45 @@ private fun PrivacySeal(
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrivacyMetric("$screenshotsChecked", "checked", MaterialTheme.colorScheme.primary)
-            PrivacyMetric("$thingsReady", "ready", MaterialTheme.colorScheme.tertiary)
-            PrivacyMetric("0", "uploaded", MaterialTheme.colorScheme.secondary)
+            PrivacyMetric(
+                value = "$screenshotsChecked",
+                label = "checked",
+                color = MaterialTheme.colorScheme.primary,
+                onClickLabel = "Read the privacy policy",
+                onClick = onOpen,
+            )
+            PrivacyMetric(
+                value = "$thingsReady",
+                label = "ready",
+                color = MaterialTheme.colorScheme.tertiary,
+                onClickLabel = "Open collections",
+                onClick = onOpenReady,
+            )
+            PrivacyMetric(
+                value = "0",
+                label = "uploaded",
+                color = MaterialTheme.colorScheme.secondary,
+                onClickLabel = "Read the privacy policy",
+                onClick = onOpen,
+            )
         }
     }
 }
 
 @Composable
-private fun PrivacyMetric(value: String, label: String, color: Color) {
+private fun PrivacyMetric(
+    value: String,
+    label: String,
+    color: Color,
+    onClickLabel: String,
+    onClick: () -> Unit,
+) {
     Column(
         modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(18.dp))
             .background(color.copy(alpha = 0.11f), RoundedCornerShape(18.dp))
+            .clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         Text(value, fontSize = 19.sp, fontWeight = FontWeight.Black, color = color)
@@ -839,8 +906,21 @@ private fun SettingRow(
     detail: String,
     accent: Color,
     trailing: @Composable () -> Unit,
+    onClickLabel: String? = null,
+    onClick: (() -> Unit)? = null,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
         Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(25.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

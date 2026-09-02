@@ -57,6 +57,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Link
@@ -70,11 +71,15 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -90,6 +95,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -99,6 +105,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,6 +140,7 @@ import app.shotlist.ui.liquidbg.LiquidBackground
 import app.shotlist.ui.notes.QuickNoteSheet
 import app.shotlist.ui.paywall.ProPreviewReason
 import app.shotlist.ui.paywall.ProPreviewSheet
+import app.shotlist.ui.quests.DailyQuest
 import app.shotlist.ui.quests.DailyQuestsCard
 import app.shotlist.ui.quests.LevelProgress
 import app.shotlist.ui.quests.LevelUpBurst
@@ -286,6 +294,7 @@ private fun AppShellContent(
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
     var collectionsOpen by rememberSaveable { mutableStateOf(false) }
     var quickNoteOpen by rememberSaveable { mutableStateOf(false) }
+    var levelSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     // Time Machine (t68): one memory card max; feed opens full-bleed.
     var memoriesOpen by rememberSaveable { mutableStateOf(false) }
@@ -312,6 +321,9 @@ private fun AppShellContent(
     var pendingNotificationAction by remember { mutableStateOf<ShotlistAction?>(null) }
     var notificationPermissionResult by remember { mutableIntStateOf(0) }
     val dailyStreak = remember(prefs) { updateDailyStreak(prefs) }
+    val bestStreak = remember(prefs, dailyStreak) {
+        maxOf(dailyStreak, prefs.getInt("daily_streak_best", 0))
+    }
     val weeklyStats = remember(findingHistory) { buildWeeklyStats(findingHistory) }
     val questDashboard = rememberQuestDashboard()
     LaunchedEffect(findings, vaultedFindings) {
@@ -567,6 +579,10 @@ private fun AppShellContent(
                     shatterOpen = false
                     recallOpen = true
                 },
+                onLevel = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    levelSheetOpen = true
+                },
             )
             Spacer(Modifier.height(16.dp))
             val memory = todayMemory
@@ -649,6 +665,19 @@ private fun AppShellContent(
                                 streak = dailyStreak,
                                 topType = weeklyStats.topType,
                             )
+                        },
+                        onOpenScan = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selected = Tab.Scan.ordinal
+                        },
+                        onOpenRecall = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            shatterOpen = false
+                            recallOpen = true
+                        },
+                        onOpenPrivacy = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selected = Tab.You.ordinal
                         },
                         onOpenDetail = { action ->
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -883,6 +912,16 @@ private fun AppShellContent(
         )
     }
 
+    if (levelSheetOpen) {
+        LevelSheet(
+            level = questDashboard?.level,
+            dailyStreak = dailyStreak,
+            bestStreak = bestStreak,
+            hazeState = hazeState,
+            onDismissRequest = { levelSheetOpen = false },
+        )
+    }
+
     detailFinding?.let { finding ->
         val action = finding.toShotlistAction()
         FindingDetailSheet(
@@ -989,6 +1028,7 @@ private fun TopGlassBar(
     questLevel: LevelProgress?,
     recallOpen: Boolean,
     onRecall: () -> Unit,
+    onLevel: () -> Unit,
 ) {
     GlassPanel(
         hazeState = hazeState,
@@ -1007,19 +1047,32 @@ private fun TopGlassBar(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
             }
-            questLevel?.let { level ->
-                QuestLevelPill(level = level)
-                Spacer(Modifier.width(9.dp))
-            }
-            Text(
-                "🔥 $dailyStreak",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFFBE63),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .background(Color(0xFFFFBE63).copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-                    .padding(horizontal = 9.dp, vertical = 5.dp),
-            )
+                    .minimumInteractiveComponentSize()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(
+                        onClickLabel = "Show level and streak",
+                        role = Role.Button,
+                        onClick = onLevel,
+                    )
+                    .padding(horizontal = 4.dp),
+            ) {
+                questLevel?.let { level ->
+                    QuestLevelPill(level = level)
+                    Spacer(Modifier.width(9.dp))
+                }
+                Text(
+                    "🔥 $dailyStreak",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFBE63),
+                    modifier = Modifier
+                        .background(Color(0xFFFFBE63).copy(alpha = 0.14f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                )
+            }
         }
         if (!recallOpen) {
             Spacer(Modifier.height(10.dp))
@@ -1055,6 +1108,127 @@ private fun TopGlassBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LevelSheet(
+    level: LevelProgress?,
+    dailyStreak: Int,
+    bestStreak: Int,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    onDismissRequest: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        containerColor = Color.Transparent,
+        dragHandle = null,
+    ) {
+        GlassPanel(
+            hazeState = hazeState,
+            cornerRadius = 36.dp,
+            contentPadding = PaddingValues(20.dp),
+            accent = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (level != null) "Level ${level.level}" else "Your rhythm",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        "Small wins, counted quietly on your phone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                    )
+                }
+                IconButton(onClick = onDismissRequest) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Close")
+                }
+            }
+            if (level != null) {
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${level.xpInLevel} / ${level.xpForNextLevel} XP",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "${(level.xpForNextLevel - level.xpInLevel).coerceAtLeast(0)} XP to level ${level.level + 1}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), CircleShape),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(level.fraction)
+                            .height(8.dp)
+                            .background(MaterialTheme.colorScheme.tertiary, CircleShape),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "${level.totalXp} XP earned so far",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LevelStat(
+                    value = "🔥 $dailyStreak",
+                    label = if (dailyStreak == 1) "day streak" else "days in a row",
+                    modifier = Modifier.weight(1f),
+                )
+                LevelStat(
+                    value = bestStreak.toString(),
+                    label = "best streak",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LevelStat(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .background(Color(0xFFFFBE63).copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFFFFBE63),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+        )
+    }
+}
+
 @Composable
 private fun InboxScreen(
     actions: List<ShotlistAction>,
@@ -1070,19 +1244,32 @@ private fun InboxScreen(
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
     onShareWrapped: () -> Unit,
+    onOpenScan: () -> Unit,
+    onOpenRecall: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     onOpenDetail: (ShotlistAction) -> Unit,
     onVault: (ShotlistAction) -> Unit,
     onSnooze: (ShotlistAction) -> Unit,
     onDismiss: (ShotlistAction) -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val headerCount = 3 + if (questDashboard != null) 1 else 0
     LaunchedEffect(focusRequestSerial, actions.size, questDashboard != null) {
         val actionIndex = actions.indexOfFirst { it.findingId == focusFindingId }
         if (actionIndex >= 0) {
-            val headerCount = 3 + if (questDashboard != null) 1 else 0
             listState.animateScrollToItem(actionIndex + headerCount)
         }
     }
+
+    fun scrollToFindings(kind: ActionKind? = null) {
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        val actionIndex = if (kind == null) 0 else actions.indexOfFirst { it.kind == kind }
+        if (actions.isEmpty() || actionIndex < 0) return
+        scope.launch { listState.animateScrollToItem(actionIndex + headerCount) }
+    }
+
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1094,6 +1281,12 @@ private fun InboxScreen(
                 DailyQuestsCard(
                     dashboard = dashboard,
                     hazeState = hazeState,
+                    onQuestClick = { quest ->
+                        when (quest) {
+                            DailyQuest.SCAN_ONE -> onOpenScan()
+                            DailyQuest.HANDLE_THREE, DailyQuest.CLEAR_INBOX -> scrollToFindings()
+                        }
+                    },
                 )
             }
         }
@@ -1103,6 +1296,7 @@ private fun InboxScreen(
                     scannedCount = scannedCount,
                     hasScreenshotAccess = hasScreenshotAccess,
                     onRequestAccess = onRequestAccess,
+                    onOpenRecall = onOpenRecall,
                     hazeState = hazeState,
                 )
             }
@@ -1120,6 +1314,9 @@ private fun InboxScreen(
                     scannedCount = scannedCount,
                     actionCount = actions.size,
                     hazeState = hazeState,
+                    onReady = { scrollToFindings() },
+                    onScanned = onOpenRecall,
+                    onPrivacy = onOpenPrivacy,
                 )
             }
             item {
@@ -1135,9 +1332,15 @@ private fun InboxScreen(
                     val eventCount = actions.count { it.kind == ActionKind.Event }
                     val codeCount = actions.count { it.kind == ActionKind.Code }
                     val deadlineCount = actions.count { it.kind == ActionKind.Deadline }
-                    if (eventCount > 0) StatPill("$eventCount events", Color(0xFF8FB5FF))
-                    if (codeCount > 0) StatPill("$codeCount codes", Color(0xFFA6F4E6))
-                    if (deadlineCount > 0) StatPill("$deadlineCount deadlines", Color(0xFFFFC978))
+                    if (eventCount > 0) {
+                        StatPill("$eventCount events", Color(0xFF8FB5FF)) { scrollToFindings(ActionKind.Event) }
+                    }
+                    if (codeCount > 0) {
+                        StatPill("$codeCount codes", Color(0xFFA6F4E6)) { scrollToFindings(ActionKind.Code) }
+                    }
+                    if (deadlineCount > 0) {
+                        StatPill("$deadlineCount deadlines", Color(0xFFFFC978)) { scrollToFindings(ActionKind.Deadline) }
+                    }
                 }
             }
             items(actions, key = { it.id }) { action ->
@@ -1173,7 +1376,9 @@ private fun WeeklyWrappedCard(
         cornerRadius = 30.dp,
         contentPadding = PaddingValues(15.dp),
         accent = Color(0xFFFF79C9),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Share your week", role = Role.Button, onClick = onShare),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -1250,6 +1455,9 @@ private fun HeroCard(
     scannedCount: Int,
     actionCount: Int,
     hazeState: dev.chrisbanes.haze.HazeState,
+    onReady: () -> Unit,
+    onScanned: () -> Unit,
+    onPrivacy: () -> Unit,
 ) {
     val displayActionCount by animateIntAsState(
         targetValue = actionCount,
@@ -1274,7 +1482,8 @@ private fun HeroCard(
             accent = MaterialTheme.colorScheme.tertiary,
             modifier = Modifier
                 .weight(1.08f)
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .clickable(onClickLabel = "Jump to your finds", role = Role.Button, onClick = onReady),
         ) {
             Icon(
                 Icons.Outlined.AutoAwesome,
@@ -1306,6 +1515,8 @@ private fun HeroCard(
                 label = "screenshots checked",
                 accent = MaterialTheme.colorScheme.primary,
                 hazeState = hazeState,
+                onClickLabel = "Search every screenshot",
+                onClick = onScanned,
                 modifier = Modifier.weight(1f),
             )
             MiniMetric(
@@ -1313,6 +1524,8 @@ private fun HeroCard(
                 label = "on your phone",
                 accent = MaterialTheme.colorScheme.secondary,
                 hazeState = hazeState,
+                onClickLabel = "Open privacy",
+                onClick = onPrivacy,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1325,6 +1538,8 @@ private fun MiniMetric(
     label: String,
     accent: Color,
     hazeState: dev.chrisbanes.haze.HazeState,
+    onClickLabel: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     GlassPanel(
@@ -1332,7 +1547,9 @@ private fun MiniMetric(
         cornerRadius = 24.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
         accent = accent,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick),
     ) {
         Text(
             value,
@@ -1354,6 +1571,7 @@ private fun EmptyInboxCard(
     scannedCount: Int,
     hasScreenshotAccess: Boolean,
     onRequestAccess: () -> Unit,
+    onOpenRecall: () -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState,
 ) {
     val displayCount by animateIntAsState(
@@ -1385,7 +1603,7 @@ private fun EmptyInboxCard(
             )
         }
         Spacer(Modifier.height(16.dp))
-        ScreenshotCount(displayCount)
+        ScreenshotCount(displayCount, onClick = onOpenRecall)
         Spacer(Modifier.height(8.dp))
         Text(
             if (hasScreenshotAccess) {
@@ -1417,8 +1635,14 @@ private fun EmptyInboxCard(
 }
 
 @Composable
-private fun ScreenshotCount(count: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun ScreenshotCount(count: Int, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClickLabel = "Search every screenshot", role = Role.Button, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    ) {
         Text(
             count.toString(),
             style = MaterialTheme.typography.headlineMedium.copy(fontSize = 40.sp, lineHeight = 42.sp),
@@ -1481,13 +1705,16 @@ private fun EmptyOrbitIllustration() {
 }
 
 @Composable
-private fun StatPill(text: String, color: Color) {
+private fun StatPill(text: String, color: Color, onClick: () -> Unit) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
         color = color,
         modifier = Modifier
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.12f))
+            .clickable(onClickLabel = "Jump to $text", role = Role.Button, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
     )
 }
