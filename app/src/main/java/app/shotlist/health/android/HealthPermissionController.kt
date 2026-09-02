@@ -23,27 +23,18 @@ internal enum class HealthPermissionDecision {
 internal class HealthPermissionController(
     context: Context,
     private val gateway: HealthGateway,
-    private val cancelStore: PermissionCancelStore = SharedPreferencesCancelStore(context),
+    cancelStore: PermissionCancelStore = SharedPreferencesCancelStore(context),
 ) {
     val requiredPermissions: Set<String> = HealthConnectGateway.READ_PERMISSIONS
+    private val promptPolicy = HealthPermissionPromptPolicy(requiredPermissions, cancelStore)
 
     fun requestContract(): ActivityResultContract<Set<String>, Set<String>> =
         PermissionController.createRequestPermissionResultContract()
 
     suspend fun hasReadPermission(): Boolean = gateway.hasReadPermission()
 
-    fun recordPromptResult(grantedPermissions: Set<String>): HealthPermissionDecision {
-        if (grantedPermissions.containsAll(requiredPermissions)) {
-            cancelStore.cancelCount = 0
-            return HealthPermissionDecision.GRANTED
-        }
-        cancelStore.cancelCount += 1
-        return if (cancelStore.cancelCount >= MAX_CANCELS) {
-            HealthPermissionDecision.MANAGE_ACCESS_REQUIRED
-        } else {
-            HealthPermissionDecision.DENIED
-        }
-    }
+    fun recordPromptResult(grantedPermissions: Set<String>): HealthPermissionDecision =
+        promptPolicy.recordResult(grantedPermissions)
 
     fun manageAccessIntent(): Intent =
         Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
@@ -59,6 +50,24 @@ internal class HealthPermissionController(
     }
 
     private val appContext = context.applicationContext
+}
+
+internal class HealthPermissionPromptPolicy(
+    private val requiredPermissions: Set<String>,
+    private val cancelStore: PermissionCancelStore,
+) {
+    fun recordResult(grantedPermissions: Set<String>): HealthPermissionDecision {
+        if (grantedPermissions.containsAll(requiredPermissions)) {
+            cancelStore.cancelCount = 0
+            return HealthPermissionDecision.GRANTED
+        }
+        cancelStore.cancelCount += 1
+        return if (cancelStore.cancelCount >= MAX_CANCELS) {
+            HealthPermissionDecision.MANAGE_ACCESS_REQUIRED
+        } else {
+            HealthPermissionDecision.DENIED
+        }
+    }
 
     companion object {
         private const val MAX_CANCELS = 2
