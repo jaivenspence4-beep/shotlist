@@ -17,6 +17,7 @@ true.
 | Recall | Local full-text screenshot search; billing-off release builds get full history, while debug can preview the 30-day Free limit | Do not market Pro until purchase and restore exist. |
 | Scan | Camera “Anything,” bundled ML Kit barcode/QR handling, and Google Play services document scanning to PDF | Camera permission is now intentional. Docs mode has a Play services/runtime-download dependency and may be unsupported on low-RAM or non-GMS devices. |
 | Track | Local menstrual-flow/cycle estimates plus habits and streaks | This is a health feature. The old “Health apps: no” answer is invalid. |
+| Metabolic Lens | Read-only Health Connect glucose history, descriptive statistics, and user-added context markers | Declare the read-glucose data type and health use, publish the health-data lifecycle, and never market this as live monitoring or medical functionality. |
 | Vault | Device-credential/biometric lock for sensitive findings; billing-off release builds are unlimited, while debug can preview the 3-item Free limit | Reviewers need device credentials to exercise the lock. |
 | Shatter | User-confirmed MediaStore trash flow for stale screenshots on Android 11+ | Describe it as review-and-trash, never automatic deletion. |
 | Other | Widgets, reminders, weekly/share cards, themes, and living backgrounds | Only market features retained in the release candidate and demonstrated with fabricated data. |
@@ -38,7 +39,7 @@ SDK-verification, and packaging blockers.
 | Broad image permission is not review-ready | The manifest requests `READ_MEDIA_IMAGES`; Play permits this only when persistent/frequent access is indispensable to promoted core functionality and Photo Picker is insufficient. | Submit the declaration and review video below. Keep recurring screenshot-library analysis as the main listing and onboarding purpose. Prepare a picker/share-only release variant if Play rejects the use case. |
 | Prominent disclosure is incomplete | Onboarding says Shotlist scans existing screenshots and that contents stay on-device, but it does not present access scope, storage, and fallback together in one disclosure immediately before the system prompt. “Choose screenshots” is available later in You, not as the onboarding secondary action. | Ship the consolidated disclosure and three choices below, then record the exact production flow. Keep notifications out of this request. |
 | Public and in-app privacy text is stale | The in-app policy omits cycle/period and habit data. `PRIVACY_POLICY_DRAFT.md` still says deletion and backup are future work and does not cover Scan, QR, Docs, vault, or health data. No public URL exists. | Reconcile both policies with the exact AAB, add health-data handling and Play-services document scanning, replace all publication placeholders, publish a stable public non-PDF page, and link the same policy in Play Console and the app. |
-| Period tracking changes the policy classification | Track stores menstrual-flow days and estimates cycle timing. Google lists period tracking as a Health apps declaration feature; current main has no health disclaimer. | Declare **Period tracking**, explain that estimates are local and informational, and add the required non-medical-device/no-diagnosis disclaimer to the store description. Verify whether any intended audience or regional obligations require more. |
+| Health features change the policy classification | Track stores menstrual-flow days and estimates cycle timing. Metabolic Lens reads glucose records through Health Connect. Current main therefore needs both feature and data-type declarations plus a complete disclaimer. | Declare **Period tracking** and Metabolic Lens's **Nutrition and weight management** use, justify read-glucose access, explain that both are local and informational, and add the required non-medical-device and professional-advice language to the store description. Verify whether any intended audience or regional obligations require more. |
 | ML Kit and Play services Data Safety need release proof | Bundled text recognition and barcode scanning use ML Kit. Docs uses `play-services-mlkit-document-scanner`, whose models, logic, and UI are dynamically delivered and run through Google Play services. Removing `INTERNET` from Shotlist's process does not prove that a Google process transfers no operational data. | Inspect the exact merged release manifest and SDK Index, test release traffic/IPC on a GMS device, and reconcile findings with Google's current ML Kit disclosure. Use the conservative Data Safety answer until verified. |
 | Notification permission is requested too broadly | `requestPrimaryAction` asks for `POST_NOTIFICATIONS` before the first action of any kind, including code, place, link, contact, product, recipe, and noise actions. | Ask only when accepting an event/deadline that schedules a reminder or when the user explicitly enables reminders, with nearby benefit copy. |
 
@@ -198,15 +199,26 @@ both. If Play rejects the declaration, ship the picker/share-only build without
 - Complete the declaration for every track, including testing tracks.
 - Select **Period tracking**. Habits alone may be general productivity, but menstrual
   flow logging and cycle timing estimates unambiguously match Play's category.
+- Select **Nutrition and weight management** for Metabolic Lens's personal reflection
+  around glucose history and user-added meal/movement/sleep/note markers. Do not select
+  disease or condition management unless the release actually adopts a medical use.
+- Declare and justify exactly `android.permission.health.READ_BLOOD_GLUCOSE`. The
+  release requests no glucose write, background-health, or extended-history access.
+- Use the paste-ready permission justification and external-product wording in
+  `METABOLIC_LENS_PLAY_DECLARATIONS.md`.
 - Describe Track as local logging and an estimate based on prior entries. Do not claim
   fertility, diagnosis, treatment, prevention, clinical accuracy, or guaranteed timing.
 - Add this store-description disclaimer unless qualified counsel requires stronger text:
 
 > Shotlist's cycle estimates are for general informational use. Shotlist is not a
 > medical device and does not diagnose, treat, cure, or prevent any medical condition.
+> Metabolic Lens presents previously recorded information for general reflection only.
+> Consult a qualified healthcare professional for medical advice, diagnosis, or
+> treatment.
 
-- Add menstrual-flow entries, derived cycle timing, habit names/ticks, storage,
-  retention, deletion, and any user-initiated sharing to both privacy policies.
+- Add menstrual-flow entries, derived cycle timing, habit names/ticks, glucose records,
+  context markers, storage, retention, deletion, and any user-initiated sharing to both
+  privacy policies.
 - Confirm the intended age rating and regional availability after the health feature
   set is frozen.
 
@@ -262,6 +274,14 @@ release exposes full Recall and vault access.
 >
 > • Keep cycle and habit entries in Shotlist's private on-device database
 >
+> SEE YOUR METABOLIC STORY
+>
+> • View glucose history you authorize through Android Health Connect
+>
+> • Add meal, movement, sleep, and note markers for personal reflection
+>
+> • Choose one source at a time and keep health information in private on-device storage
+>
 > PRIVATE BY DESIGN
 >
 > Screenshot OCR and classification happen on your device. Screenshot contents and
@@ -277,8 +297,16 @@ release exposes full Recall and vault access.
 > Shotlist never saves a calendar event or trashes a screenshot without your explicit
 > Android confirmation. Permissions can be revoked at any time in Android Settings.
 >
-> Shotlist's cycle estimates are for general informational use. Shotlist is not a
-> medical device and does not diagnose, treat, cure, or prevent any medical condition.
+> Metabolic Lens requires a compatible app or sensor service that writes glucose data
+> to Android Health Connect. Abbott Lingo users need a compatible Lingo biosensor and
+> the Lingo app with Health Connect sync enabled. Shotlist does not connect directly to
+> the sensor. Lingo's Health Connect values are delayed, so Metabolic Lens is not a live
+> glucose display.
+>
+> Shotlist's cycle estimates and Metabolic Lens are for general informational and
+> reflection use. Shotlist is not a medical device and does not diagnose, treat, cure,
+> or prevent any medical condition. Consult a qualified healthcare professional for
+> medical advice, diagnosis, or treatment.
 
 ### First release notes
 
@@ -313,9 +341,11 @@ dependency set and current Play form:
 | App info and performance / Other performance data | Yes if listed by the SDK Index/form | No | Yes | Analytics and diagnostics |
 
 Do not mark photos/videos, OCR text, document contents, calendar data, locations, codes,
-menstrual-flow entries, cycle estimates, or habits as collected if the exact release
-keeps them solely on-device. User-confirmed transfer to another app is handled according
-to Play's expected-action exceptions and must still be described in the privacy policy.
+menstrual-flow entries, cycle estimates, habits, glucose records, or Metabolic Lens
+moments as collected if the exact release keeps them solely on-device. Health is also
+excluded from the standard export. The biometric-gated, twice-confirmed health export
+is a user-confirmed transfer to another app; handle it according to Play's expected-action
+exceptions and describe it in the privacy policy.
 
 ### No-collection answer after verification
 
@@ -339,7 +369,9 @@ The Data Safety form and public privacy-policy URL remain required either way.
 - App access: no login; provide the device-lock note for vault review.
 - Data deletion: no account-deletion section unless account creation ships; document
   local deletion and a support/privacy contact.
-- Health apps: **Yes — Period tracking**.
+- Health apps: **Yes — Period tracking; Nutrition and weight management**. Declare
+  read-only Health Connect glucose access with the exact justification in
+  `METABOLIC_LENS_PLAY_DECLARATIONS.md`.
 - Medical device: no intended medical-device function; include the disclaimer above.
 - Government, financial, news/magazine, and COVID-19/contact tracing: no.
 
@@ -372,9 +404,10 @@ Asset checklist:
 1. Freeze the release feature set and keep billing-off full access unless a complete,
    tested Play Billing implementation replaces it.
 2. Fix the prominent photo disclosure and notification request context.
-3. Reconcile and publish the privacy policy, including health and Play services data.
-4. Complete the Period tracking Health apps declaration and add the non-medical
-   disclaimer.
+3. Reconcile and publish the privacy policy, including cycle, glucose, Metabolic Lens
+   markers, the 30-day recovery limitation, gated export, and Play services data.
+4. Complete the Period tracking and Metabolic Lens Health apps declarations, submit the
+   read-glucose justification, and add the non-medical/professional-advice disclaimer.
 5. Build the signed API-36 release AAB and inspect its merged manifest, dependencies,
    SDK Index, and Play pre-review output.
 6. Run release-mode traffic/IPC, storage/deletion, backup, and device-matrix tests.

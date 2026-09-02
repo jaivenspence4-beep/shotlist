@@ -40,10 +40,49 @@ Shotlist stores screenshot references, recognized text, extracted findings, acti
 states, and onboarding preferences in private app storage. Images shared directly to
 Shotlist may be copied into private app storage so processing can finish reliably.
 
-This information remains until it is deleted through Shotlist's data controls, Android's
-clear-storage control, or app uninstall, subject to Android's device-backup behavior.
-Before publication, `[DEVELOPER LEGAL NAME]` will either disable backup for
-screenshot-derived data or describe the final configured backup behavior here.
+Shotlist also stores menstrual-flow entries, locally calculated cycle estimates, habit
+names and completion ticks, and any items the user puts in the private vault.
+
+Android backup is disabled for Shotlist. Local information remains until the user
+deletes it through Shotlist's data controls, clears Shotlist storage in Android, or
+uninstalls the app.
+
+## Health Connect and Metabolic Lens
+
+Metabolic Lens can read glucose records that you explicitly authorize through Android
+Health Connect. Shotlist requests read-only glucose access. It does not request glucose
+write access, background health access, or extended health-history access. Shotlist does
+not connect directly to a glucose sensor over Bluetooth and does not send glucose data
+to Shotlist or Abbott servers.
+
+Metabolic Lens stores an on-device copy of the selected Health Connect source's record
+identifier, source-app package, observation time and optional time-zone offset, value in
+mmol/L, specimen source, and import time. It also stores meal, movement, sleep, and note
+markers that you add. This information is used only to display your 24-hour, 7-day, or
+30-day history, descriptive observed statistics, data gaps, and your own markers. It is
+not used for advertising, diagnosis, treatment, dosing, threshold alerts, or automated
+medical decisions.
+
+The initial import and recovery snapshot cover up to the latest 30 days. While its
+Health Connect change history remains valid, Shotlist also applies additions, updates,
+and deletions reported by Health Connect. If that change history expires, Shotlist can
+recheck only the current 30-day window because it does not request extended-history
+access. An older local copy may therefore remain after its source record was deleted
+from Health Connect. You can remove it immediately with Metabolic Lens → Disconnect →
+Delete local history or `Delete all my data`.
+
+Both Metabolic Lens disconnect choices attempt to revoke Shotlist's Health Connect
+access. Choosing to keep history retains the imported local copy. Choosing to delete
+history erases local glucose samples, markers, and synchronization state even if Android
+cannot complete permission revocation. Clearing app storage or uninstalling also erases
+the local copy and revokes the app's Health Connect permissions.
+
+The standard Shotlist data export excludes all health data. After unlocking with your
+device credential or biometric, you may deliberately select an initially unchecked
+`Include health data` option and confirm a second warning. That one export adds separate
+glucose-sample and moment JSON files in canonical mmol/L to the ZIP. Android then sends
+the ZIP only to the destination you choose; that destination handles it under its own
+privacy and security terms.
 
 ## Limited operational information from ML Kit
 
@@ -67,6 +106,9 @@ current release.
   Android share menu instead.
 - **Notifications:** optional alerts related to useful findings or reminders. You can
   disable them in Android Settings.
+- **Health Connect glucose:** optional read-only access for Metabolic Lens. You can
+  pause synchronization, manage access in Health Connect, disconnect and keep local
+  history, or disconnect and delete local history.
 - **Calendar and clipboard actions:** occur only after your tap. The
   production release should not request direct read or write calendar permission when
   the Android calendar insert interface is sufficient.
@@ -75,24 +117,30 @@ You can change app permissions at any time in Android Settings.
 
 ## Data sharing
 
-We do not sell personal information. We do not share screenshot contents or recognized
-text with advertisers, data brokers, or our own servers. Limited ML Kit operational data
-is processed by Google as described above. User-initiated transfers to another Android
-app occur only when you choose the corresponding action.
+We do not sell personal information. We do not share screenshot contents, recognized
+text, cycle entries, habits, glucose records, or Metabolic Lens markers with advertisers,
+data brokers, or our own servers. Limited ML Kit operational data is processed by Google
+as described above. User-initiated transfers to another Android app occur only when you
+choose the corresponding action, including when you explicitly include health data in
+an export.
 
 ## Security
 
-Shotlist limits screenshot-derived information to private app storage and uses Android
-permission controls. No storage or software system can be guaranteed completely secure.
-Keep your device and lock screen secure, especially if screenshots contain access codes
-or other sensitive information.
+Shotlist limits local information to private app storage, disables Android backup, and
+uses Android permission controls. The private vault and health-export flow use your
+device credential or biometric, and Metabolic Lens requests secure-window handling to
+block ordinary screenshots and Recents previews. No storage or software system can be
+guaranteed completely secure. Keep your device and lock screen secure, especially if
+screenshots or exports contain access codes or health information.
 
 ## Retention and deletion
 
-The production app will provide a `Delete all Shotlist data` control. You can also delete
+The app provides a `Delete all my data` control. It clears Shotlist's local database,
+private files, export cache, and health data, and it attempts to revoke Health Connect
+access. Local deletion proceeds even if permission revocation fails. You can also delete
 local Shotlist data through Android Settings or by uninstalling the app. Because the
 current release has no Shotlist account or Shotlist server storage, there is no
-server-side screenshot history to delete.
+server-side Shotlist history to delete.
 
 For questions or a privacy request, contact `[PRIVACY EMAIL]`. Describe the request and
 the app version, but do not email screenshots, passwords, or access codes.
