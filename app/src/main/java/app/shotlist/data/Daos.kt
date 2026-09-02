@@ -132,6 +132,10 @@ interface FindingDao {
     @Query("SELECT COUNT(*) FROM findings WHERE state = 'SUGGESTED'")
     fun suggestedCount(): Flow<Int>
 
+    /** Daily quests derive progress from durable state, never a new event log. */
+    @Query("SELECT COUNT(*) FROM findings WHERE state != 'SUGGESTED'")
+    fun handledCount(): Flow<Int>
+
     @Query("SELECT * FROM findings WHERE type IN (:types) ORDER BY createdAt DESC LIMIT 200")
     fun byTypes(types: List<String>): Flow<List<Finding>>
 

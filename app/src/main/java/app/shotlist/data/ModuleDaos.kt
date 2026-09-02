@@ -52,4 +52,8 @@ interface ScanDao {
             "ORDER BY scans.createdAt DESC LIMIT 100"
     )
     fun recent(): Flow<List<Scan>>
+
+    /** Monotonic baseline for the daily "scan something" quest. */
+    @Query("SELECT COUNT(*) FROM scans")
+    fun count(): Flow<Int>
 }

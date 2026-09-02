@@ -125,6 +125,12 @@ import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.liquidbg.LiquidBackground
 import app.shotlist.ui.paywall.ProPreviewReason
 import app.shotlist.ui.paywall.ProPreviewSheet
+import app.shotlist.ui.quests.DailyQuestsCard
+import app.shotlist.ui.quests.LevelProgress
+import app.shotlist.ui.quests.LevelUpBurst
+import app.shotlist.ui.quests.QuestDashboard
+import app.shotlist.ui.quests.QuestLevelPill
+import app.shotlist.ui.quests.rememberQuestDashboard
 import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
@@ -294,6 +300,7 @@ private fun AppShellContent(
     var notificationPermissionResult by remember { mutableIntStateOf(0) }
     val dailyStreak = remember(prefs) { updateDailyStreak(prefs) }
     val weeklyStats = remember(findingHistory) { buildWeeklyStats(findingHistory) }
+    val questDashboard = rememberQuestDashboard()
     LaunchedEffect(findings, vaultedFindings) {
         ShotlistWidgets.updateAll(context)
     }
@@ -512,6 +519,7 @@ private fun AppShellContent(
             TopGlassBar(
                 hazeState = hazeState,
                 dailyStreak = dailyStreak,
+                questLevel = questDashboard?.level,
                 recallOpen = recallOpen || shatterOpen,
                 onRecall = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -584,6 +592,7 @@ private fun AppShellContent(
                         scannedCount = shotCount,
                         dailyStreak = dailyStreak,
                         weeklyStats = weeklyStats,
+                        questDashboard = questDashboard,
                         hasScreenshotAccess = imageAccessGranted,
                         hazeState = hazeState,
                         onRequestAccess = {
@@ -758,6 +767,12 @@ private fun AppShellContent(
                 }
             }
         }
+        questDashboard?.let { dashboard ->
+            LevelUpBurst(
+                level = dashboard.level.level,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 
     detailFinding?.let { finding ->
@@ -848,6 +863,7 @@ private fun AppShellContent(
 private fun TopGlassBar(
     hazeState: dev.chrisbanes.haze.HazeState,
     dailyStreak: Int,
+    questLevel: LevelProgress?,
     recallOpen: Boolean,
     onRecall: () -> Unit,
 ) {
@@ -867,6 +883,10 @@ private fun TopGlassBar(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
+            }
+            questLevel?.let { level ->
+                QuestLevelPill(level = level)
+                Spacer(Modifier.width(9.dp))
             }
             Text(
                 "🔥 $dailyStreak",
@@ -922,6 +942,7 @@ private fun InboxScreen(
     scannedCount: Int,
     dailyStreak: Int,
     weeklyStats: WeeklyStats,
+    questDashboard: QuestDashboard?,
     hasScreenshotAccess: Boolean,
     hazeState: dev.chrisbanes.haze.HazeState,
     onRequestAccess: () -> Unit,
@@ -932,9 +953,12 @@ private fun InboxScreen(
     onDismiss: (ShotlistAction) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(focusRequestSerial, actions.size) {
+    LaunchedEffect(focusRequestSerial, actions.size, questDashboard != null) {
         val actionIndex = actions.indexOfFirst { it.findingId == focusFindingId }
-        if (actionIndex >= 0) listState.animateScrollToItem(actionIndex + 3)
+        if (actionIndex >= 0) {
+            val headerCount = 3 + if (questDashboard != null) 1 else 0
+            listState.animateScrollToItem(actionIndex + headerCount)
+        }
     }
     LazyColumn(
         state = listState,
@@ -942,6 +966,14 @@ private fun InboxScreen(
         contentPadding = PaddingValues(bottom = 10.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        questDashboard?.let { dashboard ->
+            item(key = "daily-quests") {
+                DailyQuestsCard(
+                    dashboard = dashboard,
+                    hazeState = hazeState,
+                )
+            }
+        }
         if (actions.isEmpty()) {
             item {
                 EmptyInboxCard(
