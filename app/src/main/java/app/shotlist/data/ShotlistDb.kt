@@ -11,8 +11,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         Shot::class, Finding::class, ShotFts::class,
         CycleEntry::class, Habit::class, HabitTick::class, Scan::class,
+        SavedBoard::class, BoardPin::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class ShotlistDb : RoomDatabase() {
@@ -21,6 +22,7 @@ abstract class ShotlistDb : RoomDatabase() {
     abstract fun cycle(): CycleDao
     abstract fun habits(): HabitDao
     abstract fun scans(): ScanDao
+    abstract fun collections(): CollectionDao
 
     companion object {
         @Volatile private var instance: ShotlistDb? = null
@@ -82,6 +84,38 @@ abstract class ShotlistDb : RoomDatabase() {
             }
         }
 
+        /** Collections are additive: existing shots/findings remain untouched. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `collection_boards` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_collection_boards_name` " +
+                        "ON `collection_boards` (`name`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `collection_pins` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`boardId` INTEGER NOT NULL, `targetType` TEXT NOT NULL, " +
+                        "`targetId` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                        "FOREIGN KEY(`boardId`) REFERENCES `collection_boards`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_collection_pins_boardId` " +
+                        "ON `collection_pins` (`boardId`)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                        "`index_collection_pins_boardId_targetType_targetId` " +
+                        "ON `collection_pins` (`boardId`, `targetType`, `targetId`)"
+                )
+            }
+        }
+
         fun get(context: Context): ShotlistDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -89,7 +123,7 @@ abstract class ShotlistDb : RoomDatabase() {
                     ShotlistDb::class.java,
                     "shotlist.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }
