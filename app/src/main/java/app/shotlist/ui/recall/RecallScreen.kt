@@ -60,6 +60,7 @@ import app.shotlist.actions.ActionKind
 import app.shotlist.data.Finding
 import app.shotlist.data.RecallHit
 import app.shotlist.data.ShotlistDb
+import app.shotlist.engine.TitleQuality
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.shell.toShotlistAction
 import coil.compose.AsyncImage
@@ -279,7 +280,7 @@ private fun RecallResultCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (locked) "Private result" else action?.title ?: "Screenshot match",
+                    if (locked) "Private result" else recallHeaderTitle(hit.findingTitle, hit.excerpt),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -313,6 +314,19 @@ private fun RecallResultCard(
             )
         }
     }
+}
+
+internal fun recallHeaderTitle(findingTitle: String?, excerpt: String): String {
+    findingTitle
+        ?.let(TitleQuality::firstUsableLine)
+        ?.let { return it }
+
+    val cleanExcerpt = excerpt
+        .replace("[", "")
+        .replace("]", "")
+        .lineSequence()
+        .joinToString("\n") { line -> line.trim().trim('…').trim() }
+    return TitleQuality.firstUsableLine(cleanExcerpt) ?: "Screenshot match"
 }
 
 internal fun toFtsMatchQuery(input: String): String =
