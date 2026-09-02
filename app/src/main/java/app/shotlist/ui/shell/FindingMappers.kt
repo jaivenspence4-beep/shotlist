@@ -6,6 +6,7 @@ import app.shotlist.data.Finding
 import java.time.Instant
 
 fun Finding.toShotlistAction(): ShotlistAction {
+    val isLockedNote = type == "NOTE" && vaulted
     val kind = when (type) {
         "EVENT" -> ActionKind.Event
         "DEADLINE" -> ActionKind.Deadline
@@ -21,9 +22,10 @@ fun Finding.toShotlistAction(): ShotlistAction {
         id = "finding-$id",
         findingId = id,
         kind = kind,
-        title = title,
-        detail = when (type) {
-            "CODE", "WIFI" -> "Sensitive value hidden. Tap Copy when you need it."
+        title = if (isLockedNote) "Vaulted note" else title,
+        detail = when {
+            isLockedNote -> "Unlock to read."
+            type == "CODE" || type == "WIFI" -> "Sensitive value hidden. Tap Copy when you need it."
             else -> snippet.ifBlank { payload.ifBlank { type.lowercase().replaceFirstChar { it.uppercase() } } }
         },
         source = if (type == "NOTE") "quick note" else "screenshot #$shotId",
