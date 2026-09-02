@@ -76,6 +76,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -105,6 +106,8 @@ fun ShatterScreen(
     var completedBytes by remember { mutableStateOf(0L) }
     var message by remember { mutableStateOf<String?>(null) }
     var burstKey by remember { mutableIntStateOf(0) }
+    var combo by remember { mutableIntStateOf(0) }
+    var bestCombo by remember { mutableIntStateOf(0) }
 
     fun load() {
         scope.launch {
@@ -131,6 +134,9 @@ fun ShatterScreen(
                 completedBytes = confirmed.sumOf { it.bytes }
                 pending = emptyList()
                 selected = emptyList()
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                delay(70)
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             }
         } else {
             message = "Nothing moved. Your screenshots are untouched."
@@ -163,11 +169,21 @@ fun ShatterScreen(
                 )
             }
             if (selected.isNotEmpty()) {
-                Text(
-                    "${selected.size} queued",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFFF79C9),
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    if (combo >= 2) {
+                        Text(
+                            "$combo× combo",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFFFFD166),
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                    Text(
+                        "${selected.size} queued",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFFF79C9),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -179,6 +195,7 @@ fun ShatterScreen(
                 count = completedCount,
                 bytes = completedBytes,
                 onShare = { context.startActivity(shatterShareIntent(context, completedCount, completedBytes)) },
+                bestCombo = bestCombo,
                 onDone = onClose,
             )
             candidates == null -> LoadingShatter(hazeState)
@@ -198,17 +215,31 @@ fun ShatterScreen(
                         item = item,
                         hazeState = hazeState,
                         onShatter = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val nextCombo = combo + 1
+                            scope.launch {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (nextCombo == 3 || nextCombo % 5 == 0) {
+                                    delay(55)
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            }
+                            combo = nextCombo
+                            bestCombo = maxOf(bestCombo, nextCombo)
                             selected = selected + item
                             cursor += 1
                             burstKey += 1
                         },
                         onKeep = {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            combo = 0
                             cursor += 1
                         },
                     )
-                    ShatterBurst(trigger = burstKey, modifier = Modifier.fillMaxSize())
+                    ShatterBurst(
+                        trigger = burstKey,
+                        combo = combo,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
             else -> ReviewSelection(
@@ -236,6 +267,8 @@ fun ShatterScreen(
                 onReviewAgain = {
                     cursor = 0
                     selected = emptyList()
+                    combo = 0
+                    bestCombo = 0
                     message = null
                 },
             )
@@ -394,6 +427,7 @@ private fun CompletedShatter(
     hazeState: HazeState,
     count: Int,
     bytes: Long,
+    bestCombo: Int,
     onShare: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -412,7 +446,12 @@ private fun CompletedShatter(
         )
         Spacer(Modifier.height(10.dp))
         Text("${formatBytes(bytes)} freed", fontSize = 36.sp, fontWeight = FontWeight.Black)
-        Text("$count screenshots moved to trash — recoverable from Photos.")
+        Text(
+            buildString {
+                append("$count screenshots moved to trash — recoverable from Photos.")
+                if (bestCombo >= 2) append(" Best combo: $bestCombo×.")
+            },
+        )
         Spacer(Modifier.height(18.dp))
         FilledTonalButton(onClick = onShare, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.Share, contentDescription = null)
@@ -455,7 +494,7 @@ private fun UnsupportedShatter(hazeState: HazeState) {
 }
 
 @Composable
-private fun ShatterBurst(trigger: Int, modifier: Modifier = Modifier) {
+private fun ShatterBurst(trigger: Int, combo: Int, modifier: Modifier = Modifier) {
     val progress = remember { Animatable(1f) }
     LaunchedEffect(trigger) {
         if (trigger > 0) {
@@ -464,23 +503,40 @@ private fun ShatterBurst(trigger: Int, modifier: Modifier = Modifier) {
         }
     }
     if (progress.value < 1f) {
-        Canvas(modifier) {
-            val origin = center
-            repeat(18) { index ->
-                val angle = index * (Math.PI * 2 / 18)
-                val inner = 30f + progress.value * 90f
-                val outer = 70f + progress.value * size.minDimension * 0.52f
-                drawLine(
-                    color = if (index % 2 == 0) Color(0xFFFF79C9) else Color(0xFF7EF5D8),
-                    start = androidx.compose.ui.geometry.Offset(
-                        origin.x + cos(angle).toFloat() * inner,
-                        origin.y + sin(angle).toFloat() * inner,
-                    ),
-                    end = androidx.compose.ui.geometry.Offset(
-                        origin.x + cos(angle).toFloat() * outer,
-                        origin.y + sin(angle).toFloat() * outer,
-                    ),
-                    strokeWidth = 3f * (1f - progress.value),
+        Box(modifier) {
+            Canvas(Modifier.fillMaxSize()) {
+                val origin = center
+                val shardCount = 18 + combo.coerceAtMost(6) * 3
+                repeat(shardCount) { index ->
+                    val angle = index * (Math.PI * 2 / shardCount)
+                    val inner = 30f + progress.value * 90f
+                    val outer = 70f + progress.value * size.minDimension * 0.52f
+                    drawLine(
+                        color = if (index % 2 == 0) Color(0xFFFF79C9) else Color(0xFF7EF5D8),
+                        start = androidx.compose.ui.geometry.Offset(
+                            origin.x + cos(angle).toFloat() * inner,
+                            origin.y + sin(angle).toFloat() * inner,
+                        ),
+                        end = androidx.compose.ui.geometry.Offset(
+                            origin.x + cos(angle).toFloat() * outer,
+                            origin.y + sin(angle).toFloat() * outer,
+                        ),
+                        strokeWidth = 3f * (1f - progress.value),
+                    )
+                }
+            }
+            if (combo >= 2) {
+                Text(
+                    "$combo×",
+                    color = Color.White.copy(alpha = (1f - progress.value).coerceIn(0f, 1f)),
+                    fontSize = (28 + combo.coerceAtMost(8) * 2).sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer {
+                            scaleX = 0.78f + progress.value * 0.44f
+                            scaleY = scaleX
+                        },
                 )
             }
         }

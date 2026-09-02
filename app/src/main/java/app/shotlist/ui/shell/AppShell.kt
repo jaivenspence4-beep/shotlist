@@ -123,6 +123,7 @@ import app.shotlist.onboarding.OnboardingPreferences
 import app.shotlist.ui.collections.CollectionTarget
 import app.shotlist.ui.collections.CollectionsScreen
 import app.shotlist.ui.collections.PinToCollectionSheet
+import app.shotlist.ui.celebration.InboxZeroCelebration
 import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
@@ -293,6 +294,8 @@ private fun AppShellContent(
         }.getOrNull()
     }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var previousInboxSize by remember { mutableStateOf<Int?>(null) }
+    var inboxZeroTrigger by remember { mutableIntStateOf(0) }
     var detailFinding by remember { mutableStateOf<Finding?>(null) }
     var detailShot by remember { mutableStateOf<Shot?>(null) }
     var pendingCollectionTarget by remember { mutableStateOf<CollectionTarget?>(null) }
@@ -507,6 +510,18 @@ private fun AppShellContent(
             delay(1_800)
             successMessage = null
         }
+    }
+
+    LaunchedEffect(findings.size) {
+        val currentSize = findings.size
+        val previousSize = previousInboxSize
+        if (previousSize != null && previousSize > 0 && currentSize == 0) {
+            inboxZeroTrigger += 1
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            delay(65)
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        previousInboxSize = currentSize
     }
 
     BackHandler(enabled = detailFinding == null && (recallOpen || shatterOpen)) {
@@ -788,6 +803,10 @@ private fun AppShellContent(
                 }
             }
         }
+        InboxZeroCelebration(
+            trigger = inboxZeroTrigger,
+            modifier = Modifier.fillMaxSize(),
+        )
         questDashboard?.let { dashboard ->
             LevelUpBurst(
                 level = dashboard.level.level,

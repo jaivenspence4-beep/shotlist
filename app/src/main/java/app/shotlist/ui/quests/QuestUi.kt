@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.TaskAlt
@@ -32,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -41,13 +45,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.shotlist.ui.glass.GlassPanel
+import app.shotlist.ui.celebration.CelebrationParticles
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.delay
 
@@ -225,12 +232,22 @@ fun LevelUpBurst(
 ) {
     var lastLevel by rememberSaveable { mutableIntStateOf(level) }
     var celebratedLevel by rememberSaveable { mutableIntStateOf(0) }
+    var celebrationVisible by rememberSaveable { mutableStateOf(false) }
+    val progress = remember { Animatable(1f) }
+    val haptics = LocalHapticFeedback.current
     LaunchedEffect(level) {
         if (level > lastLevel) {
             celebratedLevel = level
+            celebrationVisible = true
             lastLevel = level
-            delay(1_650L)
-            celebratedLevel = 0
+            progress.snapTo(0f)
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (level % 5 == 0) {
+                delay(65L)
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            progress.animateTo(1f, tween(1_650))
+            celebrationVisible = false
         } else if (level < lastLevel) {
             // Handles a user clearing app data while this composition survives.
             lastLevel = level
@@ -238,7 +255,7 @@ fun LevelUpBurst(
     }
 
     AnimatedVisibility(
-        visible = celebratedLevel > 0,
+        visible = celebrationVisible,
         enter = fadeIn() + scaleIn(initialScale = 0.55f),
         exit = fadeOut() + scaleOut(targetScale = 1.2f),
         modifier = modifier,
@@ -249,22 +266,35 @@ fun LevelUpBurst(
                 .fillMaxSize()
                 .background(Color(0xB30A0D19)),
         ) {
+            CelebrationParticles(
+                progress = progress.value,
+                intense = celebratedLevel % 5 == 0,
+                modifier = Modifier.fillMaxSize(),
+            )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
-                    Icons.Outlined.TaskAlt,
+                    if (celebratedLevel % 5 == 0) Icons.Outlined.EmojiEvents else Icons.Outlined.TaskAlt,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.size(76.dp),
                 )
                 Text(
-                    "Level $celebratedLevel",
+                    if (celebratedLevel % 5 == 0) {
+                        "Level $celebratedLevel milestone"
+                    } else {
+                        "Level $celebratedLevel"
+                    },
                     color = Color.White,
                     fontSize = 38.sp,
                     fontWeight = FontWeight.Black,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    "A little sharper every day.",
+                    if (celebratedLevel % 5 == 0) {
+                        "Five more levels of useful momentum."
+                    } else {
+                        "A little sharper every day."
+                    },
                     color = Color.White.copy(alpha = 0.72f),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = 4.dp),
