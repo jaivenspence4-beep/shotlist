@@ -61,6 +61,7 @@ import app.shotlist.data.Finding
 import app.shotlist.data.RecallHit
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.TitleQuality
+import app.shotlist.entitlement.Entitlement
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.shell.toShotlistAction
 import coil.compose.AsyncImage
@@ -75,8 +76,10 @@ import kotlinx.coroutines.flow.flowOf
 fun RecallScreen(
     hazeState: HazeState,
     vaultUnlocked: Boolean,
+    entitlement: Entitlement,
     onClose: () -> Unit,
     onFindingAction: (Finding) -> Unit,
+    onShowProPreview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,6 +103,11 @@ fun RecallScreen(
         if (matchQuery.isBlank()) flowOf(emptyList()) else db.shots().recall(matchQuery)
     }
     val results by resultsFlow.collectAsState(initial = emptyList())
+    val now = remember { System.currentTimeMillis() }
+    val visibleResults = remember(results, entitlement, now) {
+        results.filter { entitlement.includesRecallShot(it.takenAt, now) }
+    }
+    val hiddenResultCount = results.size - visibleResults.size
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,12 +153,16 @@ fun RecallScreen(
         )
         Spacer(Modifier.height(12.dp))
         when {
-            query.text.isBlank() -> RecallPrompt(hazeState)
+            query.text.isBlank() -> RecallPrompt(hazeState, entitlement)
             matchQuery.isBlank() -> RecallMessage("Type at least two letters")
             results.isEmpty() -> RecallMessage("Nothing yet. Try a name, place, code, or phrase.")
             else -> {
                 Text(
-                    "${results.size} ${if (results.size == 1) "match" else "matches"} · local and instant",
+                    if (entitlement.isPro) {
+                        "${results.size} ${if (results.size == 1) "match" else "matches"} · local and instant"
+                    } else {
+                        "${visibleResults.size} recent ${if (visibleResults.size == 1) "match" else "matches"} · last 30 days"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -160,7 +172,7 @@ fun RecallScreen(
                     contentPadding = PaddingValues(bottom = 12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(results, key = { it.shotId }) { hit ->
+                    items(visibleResults, key = { it.shotId }) { hit ->
                         RecallResultCard(
                             hit = hit,
                             hazeState = hazeState,
@@ -175,6 +187,15 @@ fun RecallScreen(
                             },
                         )
                     }
+                    if (hiddenResultCount > 0) {
+                        item(key = "recall-history-limit") {
+                            RecallHistoryLimitCard(
+                                hiddenCount = hiddenResultCount,
+                                hazeState = hazeState,
+                                onShowProPreview = onShowProPreview,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -182,7 +203,7 @@ fun RecallScreen(
 }
 
 @Composable
-private fun RecallPrompt(hazeState: HazeState) {
+private fun RecallPrompt(hazeState: HazeState, entitlement: Entitlement) {
     GlassPanel(
         hazeState = hazeState,
         cornerRadius = 32.dp,
@@ -203,11 +224,60 @@ private fun RecallPrompt(hazeState: HazeState) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
         )
+        if (!entitlement.isPro) {
+            Text(
+                "Free Recall searches your most recent 30 days.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RecallSuggestion("wifi")
             RecallSuggestion("receipt")
             RecallSuggestion("tracking")
+        }
+    }
+}
+
+@Composable
+private fun RecallHistoryLimitCard(
+    hiddenCount: Int,
+    hazeState: HazeState,
+    onShowProPreview: () -> Unit,
+) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 28.dp,
+        contentPadding = PaddingValues(16.dp),
+        accent = MaterialTheme.colorScheme.tertiary,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(
+            Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "$hiddenCount older ${if (hiddenCount == 1) "match" else "matches"}",
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            "Pro is planned to search your full on-device screenshot history.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+        )
+        FilledTonalButton(
+            onClick = onShowProPreview,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Preview Pro", fontWeight = FontWeight.Bold)
         }
     }
 }

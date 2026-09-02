@@ -106,6 +106,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.work.WorkManager
+import app.shotlist.BuildConfig
 import app.shotlist.MainActivity
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
@@ -115,11 +116,14 @@ import app.shotlist.data.Shot
 import app.shotlist.data.ShotlistDb
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
+import app.shotlist.entitlement.Entitlement
 import app.shotlist.onboarding.OnboardingFlow
+import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
-import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.liquidbg.LiquidBackground
+import app.shotlist.ui.paywall.ProPreviewReason
+import app.shotlist.ui.paywall.ProPreviewSheet
 import app.shotlist.ui.recall.RecallScreen
 import app.shotlist.ui.purge.ShatterScreen
 import app.shotlist.ui.scan.ScanScreen
@@ -228,6 +232,19 @@ private fun AppShellContent(
     val findings by db.findings().inbox().collectAsState(initial = emptyList())
     val findingHistory by db.findings().byTypes(wrappedFindingTypes).collectAsState(initial = emptyList())
     val vaultedFindings by db.findings().vaulted().collectAsState(initial = emptyList())
+    var entitlement by remember(prefs) {
+        mutableStateOf(
+            if (BuildConfig.DEBUG) {
+                Entitlement.fromStored(prefs.getString(Entitlement.DEBUG_PREF_KEY, null))
+            } else {
+                Entitlement.FREE
+            },
+        )
+    }
+    var proPreviewReason by remember { mutableStateOf<ProPreviewReason?>(null) }
+    val visibleVaultedFindings = remember(vaultedFindings, entitlement) {
+        entitlement.vaultItemLimit?.let { vaultedFindings.take(it) } ?: vaultedFindings
+    }
     val shotCount by db.shots().count().collectAsState(initial = 0)
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var recallOpen by rememberSaveable { mutableStateOf(false) }
@@ -481,10 +498,14 @@ private fun AppShellContent(
                 RecallScreen(
                     hazeState = hazeState,
                     vaultUnlocked = vaultUnlocked,
+                    entitlement = entitlement,
                     onClose = { recallOpen = false },
                     onFindingAction = { finding ->
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         showFindingDetail(finding)
+                    },
+                    onShowProPreview = {
+                        proPreviewReason = ProPreviewReason.RECALL_HISTORY
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -537,9 +558,13 @@ private fun AppShellContent(
                         onVault = { action ->
                             action.findingId?.let { id ->
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                scope.launch { db.findings().setVaulted(id, true) }
-                                vaultUnlocked = false
-                                successMessage = "Locked in your vault"
+                                if (entitlement.canAddVaultItem(vaultedFindings.size)) {
+                                    scope.launch { db.findings().setVaulted(id, true) }
+                                    vaultUnlocked = false
+                                    successMessage = "Locked in your vault"
+                                } else {
+                                    proPreviewReason = ProPreviewReason.VAULT_CAPACITY
+                                }
                             }
                         },
                         onSnooze = {
@@ -559,14 +584,34 @@ private fun AppShellContent(
                         hazeState = hazeState,
                         screenshotsChecked = shotCount,
                         thingsReady = actions.size,
-                        vaultedFindings = vaultedFindings,
+                        vaultedFindings = visibleVaultedFindings,
+                        vaultTotalCount = vaultedFindings.size,
                         vaultUnlocked = vaultUnlocked,
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
                         palette = palette,
                         livingScene = livingScene,
+                        entitlement = entitlement,
+                        showEntitlementPreview = BuildConfig.DEBUG,
                         onPaletteChanged = onPaletteChanged,
                         onLivingSceneChanged = onLivingSceneChanged,
+                        onEntitlementChanged = { newEntitlement ->
+                            if (BuildConfig.DEBUG) {
+                                entitlement = newEntitlement
+                                prefs.edit()
+                                    .putString(Entitlement.DEBUG_PREF_KEY, newEntitlement.name)
+                                    .apply()
+                                proPreviewReason = null
+                                successMessage = if (newEntitlement.isPro) {
+                                    "Previewing Pro"
+                                } else {
+                                    "Previewing free limits"
+                                }
+                            }
+                        },
+                        onShowProPreview = {
+                            proPreviewReason = ProPreviewReason.VAULT_CAPACITY
+                        },
                         onOpenShatter = {
                             recallOpen = false
                             shatterOpen = true
@@ -609,6 +654,8 @@ private fun AppShellContent(
                                 context.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
                                     .edit().clear().apply()
                                 prefs.edit().clear().apply()
+                                entitlement = Entitlement.FREE
+                                proPreviewReason = null
                                 onboardingComplete = false
                             }
                         },
@@ -679,10 +726,14 @@ private fun AppShellContent(
             },
             onVaultChanged = { vaulted ->
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                scope.launch { db.findings().setVaulted(finding.id, vaulted) }
-                detailFinding = finding.copy(vaulted = vaulted)
-                if (vaulted) vaultUnlocked = false
-                successMessage = if (vaulted) "Locked in your vault" else "Moved back to your inbox"
+                if (vaulted && !finding.vaulted && !entitlement.canAddVaultItem(vaultedFindings.size)) {
+                    proPreviewReason = ProPreviewReason.VAULT_CAPACITY
+                } else {
+                    scope.launch { db.findings().setVaulted(finding.id, vaulted) }
+                    detailFinding = finding.copy(vaulted = vaulted)
+                    if (vaulted) vaultUnlocked = false
+                    successMessage = if (vaulted) "Locked in your vault" else "Moved back to your inbox"
+                }
             },
             onDismissFinding = {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -691,6 +742,15 @@ private fun AppShellContent(
                 detailShot = null
                 successMessage = "Cleared out"
             },
+        )
+    }
+
+    proPreviewReason?.let { reason ->
+        ProPreviewSheet(
+            reason = reason,
+            hazeState = hazeState,
+            showDebugHint = BuildConfig.DEBUG,
+            onDismiss = { proPreviewReason = null },
         )
     }
 }

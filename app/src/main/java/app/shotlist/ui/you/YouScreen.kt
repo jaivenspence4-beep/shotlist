@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.shotlist.data.Finding
 import app.shotlist.engine.IngestWorker
+import app.shotlist.entitlement.Entitlement
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.privacy.PrivacyPolicyScreen
 import app.shotlist.ui.theme.LivingScene
@@ -80,13 +81,18 @@ fun YouScreen(
     screenshotsChecked: Int,
     thingsReady: Int,
     vaultedFindings: List<Finding>,
+    vaultTotalCount: Int,
     vaultUnlocked: Boolean,
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
     palette: ShotlistPalette,
     livingScene: LivingScene,
+    entitlement: Entitlement,
+    showEntitlementPreview: Boolean,
     onPaletteChanged: (ShotlistPalette) -> Unit,
     onLivingSceneChanged: (LivingScene) -> Unit,
+    onEntitlementChanged: (Entitlement) -> Unit,
+    onShowProPreview: () -> Unit,
     onOpenShatter: () -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
@@ -110,6 +116,7 @@ fun YouScreen(
             IngestWorker.enqueueSharedAll(context, uris)
         }
     }
+    val hiddenVaultCount = (vaultTotalCount - vaultedFindings.size).coerceAtLeast(0)
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -150,12 +157,20 @@ fun YouScreen(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "Private vault · ${vaultedFindings.size}",
+                            if (entitlement.isPro) {
+                                "Private vault · $vaultTotalCount"
+                            } else {
+                                "Private vault · ${vaultedFindings.size}/${entitlement.vaultItemLimit}"
+                            },
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                         )
                         Text(
-                            if (vaultUnlocked) "Unlocked for this visit" else "Codes and Wi-Fi, behind your screen lock",
+                            when {
+                                !vaultUnlocked -> "Codes and Wi-Fi, behind your screen lock"
+                                hiddenVaultCount > 0 -> "$hiddenVaultCount more private ${if (hiddenVaultCount == 1) "find" else "finds"} in Pro preview"
+                                else -> "Unlocked for this visit"
+                            },
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
                         )
@@ -200,6 +215,15 @@ fun YouScreen(
                             onUnvault(finding)
                         },
                     )
+                }
+                if (hiddenVaultCount > 0) {
+                    item(key = "vault-capacity-limit") {
+                        VaultCapacityCard(
+                            hiddenCount = hiddenVaultCount,
+                            hazeState = hazeState,
+                            onShowProPreview = onShowProPreview,
+                        )
+                    }
                 }
             }
         }
@@ -383,6 +407,44 @@ fun YouScreen(
                 modifier = Modifier.padding(start = 8.dp, top = 4.dp),
             )
         }
+        if (showEntitlementPreview) {
+            item {
+                Text(
+                    "DEVELOPER PREVIEW",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+                )
+            }
+            item {
+                GlassPanel(
+                    hazeState = hazeState,
+                    cornerRadius = 30.dp,
+                    contentPadding = PaddingValues(16.dp),
+                    accent = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    SettingRow(
+                        icon = Icons.Outlined.AutoAwesome,
+                        title = "Preview Pro tier",
+                        detail = "UI preview only · billing is disconnected",
+                        accent = MaterialTheme.colorScheme.tertiary,
+                        trailing = {
+                            Switch(
+                                checked = entitlement.isPro,
+                                onCheckedChange = { enabled ->
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onEntitlementChanged(
+                                        if (enabled) Entitlement.PRO else Entitlement.FREE,
+                                    )
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+        }
         item {
             GlassPanel(
                 hazeState = hazeState,
@@ -476,6 +538,48 @@ fun YouScreen(
 
     if (showPrivacyPolicy) {
         PrivacyPolicyScreen(onClose = { showPrivacyPolicy = false })
+    }
+}
+
+@Composable
+private fun VaultCapacityCard(
+    hiddenCount: Int,
+    hazeState: HazeState,
+    onShowProPreview: () -> Unit,
+) {
+    GlassPanel(
+        hazeState = hazeState,
+        cornerRadius = 26.dp,
+        contentPadding = PaddingValues(15.dp),
+        accent = MaterialTheme.colorScheme.tertiary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onShowProPreview),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "$hiddenCount more private ${if (hiddenCount == 1) "find" else "finds"}",
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "Preview Pro to see your unlimited vault",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                )
+            }
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = "Preview Pro",
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+        }
     }
 }
 
