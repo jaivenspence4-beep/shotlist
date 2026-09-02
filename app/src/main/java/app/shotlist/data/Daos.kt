@@ -132,6 +132,16 @@ interface FindingDao {
     @Query("DELETE FROM findings WHERE state = 'SUGGESTED'")
     suspend fun purgeSuggested()
 
+    // --- Morning digest (additive, t78) ---
+
+    /** Events/deadlines the user kept or hasn't triaged, landing in a window. */
+    @Query(
+        "SELECT * FROM findings WHERE state IN ('ACCEPTED','SUGGESTED') " +
+            "AND whenAt IS NOT NULL AND whenAt BETWEEN :from AND :until " +
+            "ORDER BY whenAt ASC LIMIT 6"
+    )
+    suspend fun dueBetween(from: Long, until: Long): List<Finding>
+
     // --- Vault ---
 
     @Query("SELECT * FROM findings WHERE vaulted = 1 AND state != 'DISMISSED' ORDER BY createdAt DESC")

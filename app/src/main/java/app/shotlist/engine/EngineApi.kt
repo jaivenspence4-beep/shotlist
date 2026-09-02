@@ -53,6 +53,7 @@ object EngineApi {
     fun startObserving(context: Context) {
         SweepWorker.ensureScheduled(context.applicationContext)
         SweepWorker.sweepNow(context.applicationContext)
+        app.shotlist.engine.digest.DigestWorker.ensureScheduled(context.applicationContext)
         if (observer != null) return
         observer = MediaObserver(context.applicationContext).also { it.start() }
     }
