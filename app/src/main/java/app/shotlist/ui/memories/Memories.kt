@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.shotlist.data.Finding
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.memories.MemoryEngine
 import app.shotlist.ui.glass.GlassPanel
@@ -106,48 +109,72 @@ fun MemoryCard(
 
 /** Full-screen vertical swipe through everything that ever mattered (t71). */
 @Composable
-fun MemoriesFeed(onClose: () -> Unit) {
+fun MemoriesFeed(
+    initialMemory: MemoryEngine.Memory? = null,
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
     val db = remember(context) { ShotlistDb.get(context) }
     val shots by db.shots().processedTimeline().collectAsState(initial = emptyList())
     val dateFmt = remember { DateTimeFormatter.ofPattern("EEEE, MMM d yyyy") }
+    // The card the person tapped is page one even when a busy library pushes a
+    // year-old shot outside processedTimeline's bounded window.
+    val feedShots = remember(shots, initialMemory) {
+        buildList {
+            initialMemory?.shot?.let(::add)
+            addAll(shots.filterNot { it.id == initialMemory?.shot?.id })
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        if (shots.isNotEmpty()) {
-            val pager = rememberPagerState(pageCount = { shots.size })
-            VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                val shot = shots[page]
-                val finds by androidx.compose.runtime.produceState(
-                    initialValue = emptyList<app.shotlist.data.Finding>(), shot.id,
+        if (feedShots.isNotEmpty()) {
+            val pager = rememberPagerState(pageCount = { feedShots.size })
+            VerticalPager(
+                state = pager,
+                key = { feedShots[it].id },
+                beyondViewportPageCount = 1,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                val shot = feedShots[page]
+                val allFinds by androidx.compose.runtime.produceState<List<Finding>?>(
+                    initialValue = null, shot.id,
                 ) {
                     value = runCatching { db.findings().forShot(shot.id) }
-                        .getOrDefault(emptyList())
-                        .filter { it.state != "DISMISSED" && !it.vaulted }
+                        .getOrNull()
                 }
+                val publicFinds = allFinds.orEmpty()
+                    .filter { it.state != "DISMISSED" && !it.vaulted }
+                val containsVaulted = allFinds?.any { it.vaulted } == true
                 Box(Modifier.fillMaxSize()) {
-                    coil.compose.SubcomposeAsyncImage(
-                        model = shot.uri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                        error = {
-                            // Share-copies are deleted after OCR: the finds ARE
-                            // the memory when the pixels are gone.
-                            Column(
-                                Modifier.fillMaxSize().padding(32.dp),
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                finds.take(4).forEach {
-                                    Text(
-                                        it.title, color = Color.White,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Spacer(Modifier.height(8.dp))
+                    when {
+                        allFinds == null -> CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                        containsVaulted -> MemoryTextFallback(
+                            findings = publicFinds,
+                            privatePixels = true,
+                        )
+                        else -> coil.compose.SubcomposeAsyncImage(
+                            model = shot.uri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                            loading = {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
                                 }
-                            }
-                        },
-                    )
+                            },
+                            error = {
+                                // Share-copies are deleted after OCR: their persisted
+                                // finds become the useful memory when pixels are gone.
+                                MemoryTextFallback(
+                                    findings = publicFinds,
+                                    privatePixels = false,
+                                )
+                            },
+                        )
+                    }
                     Column(
                         Modifier
                             .align(Alignment.BottomStart)
@@ -167,7 +194,7 @@ fun MemoriesFeed(onClose: () -> Unit) {
                             color = Color.White.copy(alpha = 0.8f),
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        finds.take(3).forEach { f ->
+                        publicFinds.take(3).forEach { f ->
                             Text(
                                 f.title, color = Color.White,
                                 style = MaterialTheme.typography.titleMedium,
@@ -175,6 +202,46 @@ fun MemoriesFeed(onClose: () -> Unit) {
                             )
                         }
                     }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 18.dp, top = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "${pager.currentPage + 1} / ${feedShots.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            if (feedShots.size > 1) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 10.dp)
+                        .background(Color.Black.copy(alpha = 0.48f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.SwapVert,
+                        contentDescription = "Swipe for another memory",
+                        tint = Color.White.copy(alpha = 0.76f),
+                        modifier = Modifier.size(19.dp),
+                    )
                 }
             }
         } else {
@@ -193,6 +260,51 @@ fun MemoriesFeed(onClose: () -> Unit) {
         ) {
             Icon(Icons.Outlined.Close, contentDescription = "Close", tint = Color.White)
         }
-        Spacer(Modifier.height(0.dp))
+    }
+}
+
+@Composable
+private fun MemoryTextFallback(
+    findings: List<Finding>,
+    privatePixels: Boolean,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF11152B), Color(0xFF341C3E), Color(0xFF0C252A))
+                )
+            ),
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(horizontal = 32.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                Icons.Outlined.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(34.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                if (privatePixels) "Private screenshot" else "The useful part stayed",
+                color = Color.White.copy(alpha = 0.68f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            findings.take(4).forEach { finding ->
+                Text(
+                    finding.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
     }
 }
