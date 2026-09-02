@@ -2,6 +2,7 @@ package app.shotlist.onboarding
 
 enum class PermissionStep {
     Intro,
+    Personalize,
     Requesting,
     Scanning,
     Ready,

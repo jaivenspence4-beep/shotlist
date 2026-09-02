@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,12 +29,18 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ImageSearch
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -77,10 +85,9 @@ fun OnboardingFlow(
     val screenshotsRead by db.shots().count().collectAsState(initial = 0)
     val suggestedActions by db.findings().suggestedCount().collectAsState(initial = 0)
     val reveal = OnboardingReveal(screenshotsRead, suggestedActions)
-    var step by rememberSaveable {
-        mutableStateOf(
-            if (hasUsableImageAccess(context)) PermissionStep.Scanning else PermissionStep.Intro,
-        )
+    var step by rememberSaveable { mutableStateOf(PermissionStep.Intro) }
+    var selectedFocusKeys by rememberSaveable {
+        mutableStateOf(OnboardingPreferences.encode(OnboardingPreferences.read(context)))
     }
     var backfillStarted by rememberSaveable { mutableStateOf(false) }
 
@@ -134,11 +141,43 @@ fun OnboardingFlow(
             AnimatedContent(targetState = step, label = "onboarding-step") { currentStep ->
                 when (currentStep) {
                     PermissionStep.Intro -> IntroStep(
-                        onContinue = {
-                            step = PermissionStep.Requesting
-                            permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
-                        },
+                        onContinue = { step = PermissionStep.Personalize },
                         onShareOnly = onFinished,
+                        hazeState = hazeState,
+                    )
+                    PermissionStep.Personalize -> PersonalizeStep(
+                        selected = OnboardingPreferences.decode(selectedFocusKeys),
+                        onToggle = { area ->
+                            val current = OnboardingPreferences.decode(selectedFocusKeys).toMutableList()
+                            if (area in current) {
+                                current.remove(area)
+                            } else if (current.size < OnboardingPreferences.MAX_FOCUS_AREAS) {
+                                current += area
+                            }
+                            selectedFocusKeys = OnboardingPreferences.encode(current)
+                        },
+                        onContinue = {
+                            OnboardingPreferences.write(
+                                context,
+                                OnboardingPreferences.decode(selectedFocusKeys),
+                            )
+                            if (hasUsableImageAccess(context)) {
+                                step = PermissionStep.Scanning
+                            } else {
+                                step = PermissionStep.Requesting
+                                permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
+                            }
+                        },
+                        onBalanced = {
+                            selectedFocusKeys = ""
+                            OnboardingPreferences.write(context, emptyList())
+                            if (hasUsableImageAccess(context)) {
+                                step = PermissionStep.Scanning
+                            } else {
+                                step = PermissionStep.Requesting
+                                permissionLauncher.launch(requiredScreenshotPermissions().toTypedArray())
+                            }
+                        },
                         hazeState = hazeState,
                     )
                     PermissionStep.Requesting -> ProgressStep(
@@ -203,7 +242,7 @@ private fun IntroStep(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Scan my screenshots")
+            Text("Make Shotlist mine")
         }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
@@ -216,6 +255,123 @@ private fun IntroStep(
             Text("Use share sheet only")
         }
     }
+}
+
+@Composable
+private fun PersonalizeStep(
+    selected: List<FocusArea>,
+    onToggle: (FocusArea) -> Unit,
+    onContinue: () -> Unit,
+    onBalanced: () -> Unit,
+    hazeState: HazeState,
+) {
+    val haptics = LocalHapticFeedback.current
+    GlassPanel(hazeState = hazeState, cornerRadius = 38.dp, modifier = Modifier.fillMaxWidth()) {
+        Icon(
+            Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.secondary,
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "What should Shotlist notice first?",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Black,
+        )
+        Spacer(Modifier.height(7.dp))
+        Text(
+            "Pick up to two. This only changes what rises to the top — nothing gets hidden.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
+        )
+        Spacer(Modifier.height(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            FocusArea.entries.forEach { area ->
+                val isSelected = area in selected
+                val enabled = isSelected || selected.size < OnboardingPreferences.MAX_FOCUS_AREAS
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f)
+                            },
+                            RoundedCornerShape(20.dp),
+                        )
+                        .clickable(enabled = enabled) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggle(area)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    Icon(
+                        focusIcon(area),
+                        contentDescription = null,
+                        tint = if (enabled) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f)
+                        },
+                    )
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            area.title,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (enabled) 1f else 0.42f,
+                            ),
+                        )
+                        Text(
+                            area.detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (enabled) 0.64f else 0.30f,
+                            ),
+                        )
+                    }
+                    if (isSelected) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        FilledTonalButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onContinue()
+            },
+            enabled = selected.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (selected.size == 1) "Use this focus" else "Use these focuses")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onBalanced()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Keep it balanced")
+        }
+    }
+}
+
+private fun focusIcon(area: FocusArea): ImageVector = when (area) {
+    FocusArea.PLANS -> Icons.Outlined.CalendarMonth
+    FocusArea.SHOPPING -> Icons.Outlined.ShoppingBag
+    FocusArea.DETAILS -> Icons.Outlined.VpnKey
+    FocusArea.IDEAS -> Icons.Outlined.Lightbulb
 }
 
 @Composable
