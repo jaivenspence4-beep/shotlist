@@ -58,6 +58,24 @@ class GlucoseSyncTest {
     }
 
     @Test
+    fun `deletion from selected writer cannot erase colliding id retained from another writer`() = runBlocking {
+        gateway.write(record("shared-id", now - hour, origin = "com.abbott.lingo"))
+        sync.refresh()
+        store.samples["com.dexcom.g7" to "shared-id"] = sample(
+            id = "shared-id",
+            observedAt = now - 2 * hour,
+            origin = "com.dexcom.g7",
+        )
+
+        gateway.delete("shared-id")
+        val result = sync.refresh()
+
+        assertEquals(GlucoseSync.Result.Synced(imported = 0, deleted = 1), result)
+        assertFalse(store.samples.containsKey("com.abbott.lingo" to "shared-id"))
+        assertTrue(store.samples.containsKey("com.dexcom.g7" to "shared-id"))
+    }
+
+    @Test
     fun `expired token falls back to a full reconciliation that drops deleted rows`() = runBlocking {
         gateway.write(record("a", now - hour))
         gateway.write(record("b", now - 2 * hour))

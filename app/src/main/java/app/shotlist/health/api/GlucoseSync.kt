@@ -128,7 +128,7 @@ class GlucoseSync(
             if (upserts.isNotEmpty()) store.upsertAll(upserts)
             importedCount += upserts.size
             page.changes.filterIsInstance<GlucoseChange.Delete>().forEach { change ->
-                deletedCount += store.deleteByRecordId(change.recordId)
+                deletedCount += store.deleteByRecordId(origin, change.recordId)
             }
             next = page.nextToken
             store.saveSyncState(store.syncState().copy(changesToken = next, lastSyncAt = clock()))

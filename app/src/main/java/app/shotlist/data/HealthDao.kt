@@ -33,9 +33,12 @@ interface GlucoseDao {
         if (rows.isNotEmpty()) upsertAll(rows)
     }
 
-    /** Health Connect deletions carry no origin, so the id is matched everywhere. */
-    @Query("DELETE FROM glucose_samples WHERE recordId = :recordId")
-    suspend fun deleteByRecordId(recordId: String): Int
+    /** The changes token is origin-filtered, so keep source-scoped record IDs isolated. */
+    @Query(
+        "DELETE FROM glucose_samples WHERE sourcePackage = :origin " +
+            "AND recordId = :recordId"
+    )
+    suspend fun deleteByRecordId(origin: String, recordId: String): Int
 
     @Query(
         "SELECT * FROM glucose_samples WHERE sourcePackage = :origin " +

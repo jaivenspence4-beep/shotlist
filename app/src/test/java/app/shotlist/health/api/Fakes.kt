@@ -80,9 +80,9 @@ class FakeGlucoseStore : GlucoseStore {
         rows.forEach { samples[it.sourcePackage to it.recordId] = it }
     }
 
-    override suspend fun deleteByRecordId(recordId: String): Int {
+    override suspend fun deleteByRecordId(origin: String, recordId: String): Int {
         val before = samples.size
-        samples.entries.removeIf { it.key.second == recordId }
+        samples.remove(origin to recordId)
         return before - samples.size
     }
 
@@ -112,9 +112,10 @@ fun sample(
     id: String,
     observedAt: Long,
     mmol: Double = 5.5,
+    origin: String = "com.abbott.lingo",
     specimen: SpecimenSource = SpecimenSource.INTERSTITIAL_FLUID,
 ) = GlucoseSample(
-    sourcePackage = "com.abbott.lingo",
+    sourcePackage = origin,
     recordId = id,
     observedAt = observedAt,
     zoneOffsetSeconds = null,
