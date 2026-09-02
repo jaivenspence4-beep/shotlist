@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -93,6 +94,7 @@ fun YouScreen(
     onLivingSceneChanged: (LivingScene) -> Unit,
     onEntitlementChanged: (Entitlement) -> Unit,
     onShowProPreview: () -> Unit,
+    onOpenCollections: () -> Unit,
     onOpenShatter: () -> Unit,
     onAutoScanChanged: (Boolean) -> Unit,
     onOpenVault: () -> Unit,
@@ -224,6 +226,47 @@ fun YouScreen(
                             onShowProPreview = onShowProPreview,
                         )
                     }
+                }
+            }
+        }
+        item(key = "collections") {
+            GlassPanel(
+                hazeState = hazeState,
+                cornerRadius = 30.dp,
+                contentPadding = PaddingValues(16.dp),
+                accent = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onOpenCollections()
+                    },
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconBubble(
+                        color = MaterialTheme.colorScheme.secondary,
+                        icon = {
+                            Icon(
+                                Icons.Outlined.CollectionsBookmark,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                            )
+                        },
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Collections", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(
+                            "Boards for screenshots and useful finds",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        )
+                    }
+                    Icon(
+                        Icons.Outlined.ChevronRight,
+                        contentDescription = "Open collections",
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
                 }
             }
         }

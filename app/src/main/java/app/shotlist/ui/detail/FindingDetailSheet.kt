@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.ButtonDefaults
@@ -80,6 +81,7 @@ fun FindingDetailSheet(
     onUnlock: () -> Unit,
     onPrimaryAction: () -> Unit,
     onShare: () -> Unit,
+    onPin: () -> Unit,
     onVaultChanged: (Boolean) -> Unit,
     onDismissFinding: () -> Unit,
 ) {
@@ -220,6 +222,19 @@ fun FindingDetailSheet(
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (finding.vaulted) "Unvault" else "Vault")
                             }
+                        }
+                        Spacer(Modifier.height(9.dp))
+                        FilledTonalButton(
+                            onClick = onPin,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Color.White.copy(alpha = 0.08f),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Outlined.PushPin, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Pin to a collection")
                         }
                         Spacer(Modifier.height(9.dp))
                         FilledTonalButton(

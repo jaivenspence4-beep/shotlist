@@ -119,6 +119,9 @@ import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.entitlement.Entitlement
 import app.shotlist.onboarding.OnboardingFlow
+import app.shotlist.ui.collections.CollectionTarget
+import app.shotlist.ui.collections.CollectionsScreen
+import app.shotlist.ui.collections.PinToCollectionSheet
 import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
@@ -276,6 +279,7 @@ private fun AppShellContent(
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var recallOpen by rememberSaveable { mutableStateOf(false) }
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
+    var collectionsOpen by rememberSaveable { mutableStateOf(false) }
 
     // Time Machine (t68): one memory card max; feed opens full-bleed.
     var memoriesOpen by rememberSaveable { mutableStateOf(false) }
@@ -290,6 +294,7 @@ private fun AppShellContent(
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var detailFinding by remember { mutableStateOf<Finding?>(null) }
     var detailShot by remember { mutableStateOf<Shot?>(null) }
+    var pendingCollectionTarget by remember { mutableStateOf<CollectionTarget?>(null) }
     var imageAccessGranted by remember { mutableStateOf(hasScreenshotAccess(context)) }
     var autoScanEnabled by rememberSaveable {
         mutableStateOf(prefs.getBoolean("auto_scan", true))
@@ -501,6 +506,9 @@ private fun AppShellContent(
     BackHandler(enabled = memoriesOpen) {
         memoriesOpen = false
     }
+    BackHandler(enabled = collectionsOpen) {
+        collectionsOpen = false
+    }
 
     Box(
         modifier = Modifier
@@ -673,6 +681,11 @@ private fun AppShellContent(
                         onShowProPreview = {
                             proPreviewReason = ProPreviewReason.VAULT_CAPACITY
                         },
+                        onOpenCollections = {
+                            recallOpen = false
+                            shatterOpen = false
+                            collectionsOpen = true
+                        },
                         onOpenShatter = {
                             recallOpen = false
                             shatterOpen = true
@@ -735,6 +748,7 @@ private fun AppShellContent(
                 onSelected = {
                     recallOpen = false
                     shatterOpen = false
+                    collectionsOpen = false
                     if (selected != it) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selected = it
@@ -773,8 +787,28 @@ private fun AppShellContent(
         if (memoriesOpen) {
             app.shotlist.ui.memories.MemoriesFeed(
                 initialMemory = todayMemory,
+                onPinShot = { shot ->
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    pendingCollectionTarget = CollectionTarget.shot(shot)
+                },
                 onClose = { memoriesOpen = false },
             )
+        }
+        if (collectionsOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.96f))
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+            ) {
+                CollectionsScreen(
+                    hazeState = hazeState,
+                    onClose = { collectionsOpen = false },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 
@@ -805,6 +839,13 @@ private fun AppShellContent(
                 detailFinding = null
                 detailShot = null
             },
+            onPin = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                pendingCollectionTarget = CollectionTarget.finding(finding)
+                // Avoid stacking modal sheets; the collection picker replaces detail.
+                detailFinding = null
+                detailShot = null
+            },
             onVaultChanged = { vaulted ->
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 if (vaulted && !finding.vaulted && !entitlement.canAddVaultItem(vaultedFindings.size)) {
@@ -823,6 +864,14 @@ private fun AppShellContent(
                 detailShot = null
                 successMessage = "Cleared out"
             },
+        )
+    }
+
+    pendingCollectionTarget?.let { target ->
+        PinToCollectionSheet(
+            target = target,
+            hazeState = hazeState,
+            onDismissRequest = { pendingCollectionTarget = null },
         )
     }
 

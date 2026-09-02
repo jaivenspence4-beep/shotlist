@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.shotlist.data.Finding
+import app.shotlist.data.Shot
 import app.shotlist.data.ShotlistDb
 import app.shotlist.engine.memories.MemoryEngine
 import app.shotlist.ui.glass.GlassPanel
@@ -111,6 +113,7 @@ fun MemoryCard(
 @Composable
 fun MemoriesFeed(
     initialMemory: MemoryEngine.Memory? = null,
+    onPinShot: (Shot) -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -201,6 +204,20 @@ fun MemoriesFeed(
                                 fontWeight = FontWeight.SemiBold, maxLines = 1,
                             )
                         }
+                    }
+                    IconButton(
+                        onClick = { onPinShot(shot) },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .navigationBarsPadding()
+                            .padding(end = 18.dp, bottom = 104.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp)),
+                    ) {
+                        Icon(
+                            Icons.Outlined.PushPin,
+                            contentDescription = "Pin screenshot to a collection",
+                            tint = Color.White,
+                        )
                     }
                 }
             }
