@@ -53,27 +53,6 @@ object Classifier {
         setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
     )
 
-    // Lines that must never become card titles: URLs, emails, UI fragments.
-    // Domain tokens are rejected even without a trailing slash — OCR mangles
-    // "order.littlecaesars.com" into fragments that dodged the old pattern.
-    // No trailing \b on domain suffixes: OCR concatenates ("tiktok.comview")
-    // and the boundary let it through. Over-rejection is safe for titles —
-    // the next line gets a chance instead.
-    private val junkTitle = Regex(
-        "(://|www\\.|@\\w+\\.|^\\W+$|^[%/|•·\\-_=+ ]|\\.\\w{2,4}/|" +
-            "\\.(com|net|org|io|co|app|gov|edu|me|tv))",
-        RegexOption.IGNORE_CASE,
-    )
-    private val uiNoiseTitles = setOf(
-        "done", "follow", "following", "followers", "subscribe", "like", "likes",
-        "share", "views", "comments", "next", "back", "ok", "cancel", "menu",
-        "home", "search", "live", "reply",
-    )
-
-    /** "7 Follow", "25 likes" — social counters are not headlines. */
-    private fun isSocialCounter(line: String): Boolean =
-        line.lowercase().replace(Regex("[^a-z ]"), "").trim() in uiNoiseTitles
-
     private val whenFormat = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a")
 
     // Payment screens: "Visa ending 4242, Expires 05/31" is a card expiry,
@@ -95,7 +74,7 @@ object Classifier {
         val cleaned = clockLine.replace(text, "")
         val lower = cleaned.lowercase()
         val out = mutableListOf<Finding>()
-        val title = titleFrom(cleaned)
+        val title = TitleQuality.firstUsableLine(cleaned)
 
         val eventScore = score(lower, eventWords)
         val deadlineScore = score(lower, deadlineWords)
@@ -201,20 +180,6 @@ object Classifier {
 
     private fun score(lower: String, words: List<String>): Int =
         words.count { lower.contains(it) }
-
-    /** First line that could be a headline a human would accept. */
-    private fun titleFrom(text: String): String? =
-        text.lineSequence()
-            .map { it.trim() }
-            .firstOrNull { line ->
-                line.length in 4..64 &&
-                    line.any(Char::isLetter) &&
-                    !junkTitle.containsMatchIn(line) &&
-                    !isSocialCounter(line) &&
-                    line.lowercase().trim('!', '.', ' ') !in uiNoiseTitles &&
-                    line.count(Char::isDigit) < line.length / 2
-            }
-            ?.take(64)
 
     private fun describeWhen(whenAt: Long, deadline: Boolean, address: String?): String {
         val stamp = Instant.ofEpochMilli(whenAt).atZone(ZoneId.systemDefault())
