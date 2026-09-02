@@ -41,10 +41,9 @@ object ShotlistExport {
     }
 
     suspend fun clearCached(context: Context) = withContext(Dispatchers.IO) {
-        exportDirectory(context.applicationContext).listFiles()
-            .orEmpty()
-            .filter(::isExportFile)
-            .forEach { it.delete() }
+        val sharedDirectory = exportDirectory(context.applicationContext)
+        sharedDirectory.listFiles().orEmpty().forEach { it.deleteRecursively() }
+        sharedDirectory.delete()
     }
 
     private fun createZip(context: Context): File {
