@@ -1,64 +1,88 @@
 # Shotlist Google Play readiness
 
-Last policy check: 2026-08-31
+Last code audit: 2026-09-01 (`cf3c5f2`)
 
-This is the submission source of truth for the current Android v1. It is deliberately
-limited to features that exist in the build. Future Scan, Track, vault, search, price
-watch, subscription, and cloud features must not appear in the listing until they ship.
+Last policy check: 2026-09-01
+
+This is the submission source of truth for the current Android main branch. It must be
+rechecked against the exact release AAB: main now contains substantially more than the
+original screenshot Inbox, and several old “future feature” assumptions are no longer
+true.
+
+## Current shipping surface
+
+| Area | What exists on current main | Store consequence |
+| --- | --- | --- |
+| Screenshot Inbox | Broad-library backfill, live observer, 15-minute WorkManager catch-up, share-sheet ingest, Photo Picker import, local OCR/classification, detail-first actions | Keep screenshot understanding as the first and dominant listing promise if requesting broad photo access. Do not promise immediate closed-app detection. |
+| Recall | Local full-text screenshot search; Free UI shows the latest 30 days and a planned-Pro preview for older matches | Resolve the non-purchasable Pro state before release. |
+| Scan | Camera “Anything,” bundled ML Kit barcode/QR handling, and Google Play services document scanning to PDF | Camera permission is now intentional. Docs mode has a Play services/runtime-download dependency and may be unsupported on low-RAM or non-GMS devices. |
+| Track | Local menstrual-flow/cycle estimates plus habits and streaks | This is a health feature. The old “Health apps: no” answer is invalid. |
+| Vault | Device-credential/biometric lock for sensitive findings; Free UI exposes 3 items and previews unlimited Pro | Reviewers need device credentials to exercise the lock; resolve the non-purchasable Pro state. |
+| Shatter | User-confirmed MediaStore trash flow for stale screenshots on Android 11+ | Describe it as review-and-trash, never automatic deletion. |
+| Other | Widgets, reminders, weekly/share cards, themes, and living backgrounds | Only market features retained in the release candidate and demonstrated with fabricated data. |
+
+There is no account, advertising SDK, cloud sync, or connected billing implementation.
+The Pro sheet explicitly says purchases are not connected and cannot charge the user.
 
 ## Release verdict
 
-**Not ready for Play submission yet.** The product has a credible broad-photo-access
-case, but permission review evidence, disclosure, public privacy publication, and the
-release bundle still need work before review.
+**Not ready for Play submission.** Current main has a credible broad-photo-access case
+and good local-data controls, but the release still has policy, disclosure, health,
+monetization, and packaging blockers.
 
 ### P0 blockers
 
-| Blocker | Why it matters | Required outcome |
+| Blocker | Current-main evidence | Required outcome |
 | --- | --- | --- |
-| Broad image permission is not yet review-ready | `READ_MEDIA_IMAGES` requires a declaration proving persistent or frequent access is indispensable to the app's promoted core function. Approval is not automatic. | Use the declaration and review video below. Keep screenshot scanning as the first and dominant listing promise. |
-| Disclosure is incomplete | The pre-permission screen says Shotlist scans screenshots, but it does not plainly state the scope, storage, and fallback in one disclosure immediately before the system prompt. | Use the disclosure copy below, followed by a distinct affirmative button. Ask for notifications later, in context, rather than in the image-permission batch. |
-| Public privacy policy is not published | Apps accessing sensitive data need a public privacy-policy URL in Play Console and an in-app link. The in-app policy and You-tab link now ship. | Replace every placeholder in the companion draft, publish it as a stable non-PDF public page, add that URL to Play Console, and reconcile the in-app copy with the final release AAB. |
-| ML Kit Data Safety needs release-level proof | Commit `ab9b08a` strips `INTERNET` and `ACCESS_NETWORK_STATE` during manifest merge, preventing ordinary in-process network access. However, ML Kit's current SDK disclosure says bundled features collect app/device information, performance metrics, and a per-installation identifier; manifest removal alone does not prove the SDK never hands telemetry to another Google process. | Inspect the merged manifest, run release traffic/IPC tests on a Google Play services device, and reconcile the result with Play's SDK Index. Until then, use screenshot-specific upload wording and the conservative Data Safety answer below. |
-| Notification permission context is too broad | The reminder loop now ships, but `POST_NOTIFICATIONS` is requested before every kind of first primary action, including code and place actions that never schedule a reminder. | Ask only when a user accepts an event/deadline or explicitly enables reminders, with nearby copy explaining the alert benefit. |
+| Broad image permission is not review-ready | The manifest requests `READ_MEDIA_IMAGES`; Play permits this only when persistent/frequent access is indispensable to promoted core functionality and Photo Picker is insufficient. | Submit the declaration and review video below. Keep recurring screenshot-library analysis as the main listing and onboarding purpose. Prepare a picker/share-only release variant if Play rejects the use case. |
+| Prominent disclosure is incomplete | Onboarding says Shotlist scans existing screenshots and that contents stay on-device, but it does not present access scope, storage, and fallback together in one disclosure immediately before the system prompt. “Choose screenshots” is available later in You, not as the onboarding secondary action. | Ship the consolidated disclosure and three choices below, then record the exact production flow. Keep notifications out of this request. |
+| Public and in-app privacy text is stale | The in-app policy omits cycle/period and habit data. `PRIVACY_POLICY_DRAFT.md` still says deletion and backup are future work and does not cover Scan, QR, Docs, vault, health data, or Pro preview limits. No public URL exists. | Reconcile both policies with the exact AAB, add health-data handling and Play-services document scanning, replace all publication placeholders, publish a stable public non-PDF page, and link the same policy in Play Console and the app. |
+| Period tracking changes the policy classification | Track stores menstrual-flow days and estimates cycle timing. Google lists period tracking as a Health apps declaration feature; current main has no health disclaimer. | Declare **Period tracking**, explain that estimates are local and informational, and add the required non-medical-device/no-diagnosis disclaimer to the store description. Verify whether any intended audience or regional obligations require more. |
+| ML Kit and Play services Data Safety need release proof | Bundled text recognition and barcode scanning use ML Kit. Docs uses `play-services-mlkit-document-scanner`, whose models, logic, and UI are dynamically delivered and run through Google Play services. Removing `INTERNET` from Shotlist's process does not prove that a Google process transfers no operational data. | Inspect the exact merged release manifest and SDK Index, test release traffic/IPC on a GMS device, and reconcile findings with Google's current ML Kit disclosure. Use the conservative Data Safety answer until verified. |
+| Notification permission is requested too broadly | `requestPrimaryAction` asks for `POST_NOTIFICATIONS` before the first action of any kind, including code, place, link, contact, product, recipe, and noise actions. | Ask only when accepting an event/deadline that schedules a reminder or when the user explicitly enables reminders, with nearby benefit copy. |
+| Production monetization state is incomplete | Release builds start in Free, limit Recall to 30 days and the vault UI to 3 items, then open a Pro preview with no purchase path. | Before store submission, either remove the release limits/paywall, or connect compliant Play Billing and complete pricing, purchase, restore, cancellation, and entitlement testing. Do not ship an unreachable upgrade as a finished product. |
 
 ### P1 submission gates
 
-- Produce a signed Android App Bundle, not only an APK; protect the upload key and
-  enroll in Play App Signing.
-- Use a non-placeholder launcher icon and unique store icon.
+- Produce and test a signed, minified Android App Bundle. CI currently builds and
+  distributes only a debug APK. Protect the upload key and enroll in Play App Signing.
 - Confirm `app.shotlist` is the permanent package name before the first upload.
-- Replace version `0.1.0` / code `1` with the intended first-store version.
-- Run the merged-manifest and SDK Index checks on the exact release AAB.
-- Test on Pixel, Samsung, and one non-stock/budget device with full, partial, denied,
-  revoked, and share-only access states.
-- Verify the observer's real promise. It is process-scoped today, so do not claim that
-  closed-app screenshots are always detected unless a compliant implementation ships.
-- Add a clear empty state and recovery path when no screenshots contain readable text.
-- Use fabricated review media; never put a real Wi-Fi password, ticket, address, or
-  calendar event in screenshots or the permissions video.
+- Versioning is now automated: CI uses `GITHUB_RUN_NUMBER` for `versionCode` and
+  `0.1.<run>` for `versionName`, with local fallback code `1`. Confirm the intended
+  public version name and that every uploaded AAB's code remains monotonically higher.
+- The adaptive launcher icon is no longer a blank placeholder. Still produce and review
+  the separate 512×512 store icon and 1024×500 feature graphic.
+- Run merged-manifest, dependency, permission, and SDK Index checks on the exact AAB.
+- Move `play-services-mlkit-document-scanner:16.0.0-beta1` to an approved release
+  dependency or document why the beta is acceptable; test first-run module download,
+  no-GMS behavior, and the documented low-RAM unsupported path.
+- Test Pixel, Samsung, and a non-stock/budget device across full, partial, denied,
+  revoked, picker-only, and share-only image access.
+- Test camera denied/revoked, unavailable camera, QR types, biometric unavailable,
+  Android 11+ trash confirmation, and Docs unsupported/download-failure states.
+- Verify actual observer behavior under force-stop, process death, OEM battery limits,
+  reboot, and 15-minute WorkManager scheduling. Market eventual catch-up, not instant
+  background detection.
+- Verify TalkBack, font scaling, color contrast, keyboard/focus order, rotation, and
+  process restoration for every store-promoted path.
+- Use fabricated review media; never expose a real Wi-Fi password, ticket, address,
+  period log, medical detail, calendar event, or access code.
 
-### Resolved by manifest hardening (`ab9b08a`)
+## Resolved on current main
 
-- Removed unused camera, read/write calendar, foreground-service, and boot permissions.
-- Kept calendar creation on Android's user-confirmed `ACTION_INSERT` flow.
-- Added merge-level removal of transitive `INTERNET` and `ACCESS_NETWORK_STATE`.
-- Kept `WAKE_LOCK` for WorkManager's bounded OCR jobs; confirm its presence and purpose
-  in the final merged manifest.
-
-### Resolved by the current store-readiness pass
-
-- Raised `compileSdk` and `targetSdk` to Android 16 / API 36; CI unit tests and the
-  debug APK build pass. Physical Android 16 regression remains part of the release gate.
-- Added a visible `Import screenshots` action using Android Photo Picker. Multi-select
-  imports are copied serially into private storage before OCR, and the existing Android
-  share-sheet path remains available.
-- Added a full in-app privacy policy reachable from the You tab and replaced the
-  absolute `0 bytes sent` dashboard claim with screenshot-specific upload wording.
-- Declared Android 14 selected-photo access and added picker-based reselection.
-- Guarded `RELATIVE_PATH` on Android 8–9 while retaining filename fallback filtering.
-- Added `Delete all my data`, deletes temporary imported images after OCR, and disabled
-  Android backup for Shotlist's local screenshot-derived data.
+- `compileSdk` and `targetSdk` are API 36; current CI unit tests and debug APK pass.
+- Manifest merge removes transitive `INTERNET` and `ACCESS_NETWORK_STATE`, Android
+  backup is disabled, and app-private imported images are deleted after OCR.
+- Unused direct calendar, foreground-service, and boot permissions are absent.
+  Calendar creation remains on Android's user-confirmed `ACTION_INSERT` flow.
+- Camera permission is present because the shipping Scan tab uses CameraX. Hardware is
+  declared optional so non-camera devices are not filtered from Play automatically.
+- Android 14 selected-photo access, Photo Picker import, and image share-sheet ingest
+  provide minimum-scope paths. Multi-select copies are serialized and collision-safe.
+- An in-app privacy policy, `Delete all my data`, biometric vault lock, and
+  screenshot-specific upload wording ship.
+- `WAKE_LOCK` is retained for WorkManager's bounded OCR jobs; confirm its final merged
+  purpose before submission.
 
 ## Photo permission declaration
 
@@ -73,46 +97,43 @@ release bundle still need work before review.
 ### Core functionality — paste-ready draft
 
 > Shotlist's primary purpose is to scan the user's screenshot collection and turn
-> information in those images into reviewable action cards, such as calendar events,
-> deadlines, and codes. On first run it can scan existing screenshots; while
-> active it detects newly created screenshots and processes them. This repeated access
-> to the Screenshots collection is the app's central user-facing function, not an
-> optional attachment feature.
+> information in those images into reviewable actions, such as calendar events,
+> deadlines, codes, links, and places. On first run it can scan existing screenshots;
+> after that it observes new screenshots while active and uses scheduled catch-up work.
+> This repeated access to the Screenshots collection is the app's central user-facing
+> function, not an optional attachment feature.
 
 ### Why Photo Picker is insufficient — paste-ready draft
 
-> Android Photo Picker only returns images the user manually selects during a picker
-> session. It cannot query the Screenshots collection by media metadata, backfill an
-> existing screenshot history without repeated selection, or observe newly created
-> screenshots for the app's recurring screenshot-to-action loop. Shotlist therefore
-> needs image-library access for its promoted automatic and bulk screenshot workflow.
-> Users who decline broad access can still import selected images with Photo Picker or
-> share individual screenshots to Shotlist.
-
-The Photo Picker sentence now matches the shipping in-app control.
+> Android Photo Picker returns only images the user manually selects during a picker
+> session. It cannot query the Screenshots collection by media metadata, perform the
+> promoted bounded history scan without repeated selection, or observe newly created
+> screenshots for the recurring screenshot-to-action loop. Users who decline broad
+> access can still import selected images with Photo Picker or share individual images
+> to Shotlist.
 
 ### Data minimization — paste-ready draft
 
 > Shotlist queries image metadata and opens image content only after filtering for
-> likely screenshots using screenshot folder and filename signals. The first-run scan
-> is capped, and later queries are limited to recent images. OCR and classification of
-> screenshot contents run on the device. Screenshot images and extracted text are not
-> sent to Shotlist servers, are not used for advertising, and are not sold. Results are
-> stored in private app storage until the user deletes them or clears Shotlist data.
+> likely screenshots using screenshot folder and filename signals. The first scan is
+> capped, and later queries are limited to recent images. OCR and classification run on
+> the device. Screenshot images and extracted text are not sent to Shotlist servers,
+> used for advertising, or sold. Results remain in private app storage until the user
+> deletes them or clears Shotlist data.
 
-This wording intentionally says **Shotlist servers**, not **zero network traffic**,
-because the bundled ML Kit SDK documents operational telemetry.
+This intentionally says **Shotlist servers**, not **zero network traffic**, because
+Google documents ML Kit operational data, and Docs is powered by Google Play services.
 
-### User-facing prominent disclosure
+### Required prominent disclosure
 
-Place this in its own visible block immediately before the broad image permission
-request. Do not combine it with notification consent.
+Place this in one visible block immediately before the broad image permission request.
+Do not combine it with camera, notification, health, or marketing consent.
 
 > Shotlist accesses images in your Screenshots collection to scan existing and new
-> screenshots for dates, deadlines, and codes. Screenshot contents and
-> extracted text are processed and stored on this device; they are not sent to
-> Shotlist servers. You can continue without full access by importing or sharing
-> individual screenshots.
+> screenshots for dates, deadlines, codes, links, and places. Screenshot contents and
+> extracted text are processed and stored on this device; they are not sent to Shotlist
+> servers. You can continue without full access by choosing or sharing individual
+> screenshots.
 
 Primary button: `Allow screenshot scanning`
 
@@ -120,235 +141,258 @@ Secondary button: `Choose screenshots instead`
 
 Tertiary action: `Use share sheet only`
 
+Current code instead uses `Scan my screenshots` and `Use share sheet only`; do not
+record the review video until the production labels and picker route match this section.
+
 ### Review instructions — paste-ready draft
 
-> No account or special credentials are required. Install on a device containing at
-> least five test screenshots with clearly printed English text, including two future
-> dates/times, one event address, and one short code. Launch Shotlist, tap “Allow screenshot
-> scanning,” and choose full photo access in the Android dialog. The onboarding scan
-> shows how many screenshots were read and then opens an Inbox of action cards. Tap an
-> event card to open Android's calendar insert screen; no event is saved until the
-> reviewer confirms in the calendar app; an address in that screenshot should prefill
-> the event location. Tap a code card to copy it. To test the
-> minimum-scope fallback, clear app data, relaunch, choose “Choose screenshots instead”
-> or share an image to Shotlist from Android's share menu.
+> No account or developer credentials are required. A device screen lock is needed only
+> to test the private vault. Install on a device containing at least five fabricated
+> screenshots with clear English text: two future dates/times, one address, one URL, and
+> one short code. Launch Shotlist, choose “Allow screenshot scanning,” and grant full
+> image access. The bounded onboarding scan reports screenshots read and useful finds.
+> In Inbox, tap an event card to open its detail sheet, then tap the explicit calendar
+> action; Android's insert screen opens and saves nothing until the reviewer confirms.
+> Cancel, return, and copy the fabricated code from its detail sheet. Open Recall and
+> search for a phrase from the fixtures. To test minimum scope, clear app data, relaunch,
+> choose the picker or share-only path, then import a fabricated screenshot from You →
+> Import screenshots.
 
-Update the exact labels after the fallback UI ships.
+Replace the labels with the exact release UI after the disclosure blocker is fixed.
 
 ### Required declaration video
 
-Make one unlisted 45–75 second YouTube video with no cuts hiding permission state:
+Create one unlisted 45–75 second YouTube video with no cuts hiding permission state:
 
-1. Show Shotlist's Play-ready version number and a device gallery containing only
-   fabricated screenshot fixtures.
+1. Show the exact version/package and a gallery containing only fabricated fixtures.
 2. Launch from a clean install and show the complete in-app disclosure.
-3. Tap the affirmative button and grant full image access in the Android prompt.
-4. Show the bounded backfill scan and resulting Inbox action cards.
-5. Open an event card into the system calendar insert UI, then cancel without saving.
-6. Return to Shotlist and copy a fabricated code.
-7. Take a new text screenshot while Shotlist is active, return, and show it being found.
-8. Show the minimum-scope Photo Picker or share-sheet fallback.
+3. Grant full image access in the Android prompt.
+4. Show bounded backfill and resulting Inbox cards.
+5. Open event detail, open the calendar insert UI, and cancel without saving.
+6. Return and copy a fabricated code.
+7. Take a new text screenshot, return to Shotlist, and show observer/catch-up behavior
+   without claiming it was found while force-stopped.
+8. Show the Photo Picker or share-sheet fallback.
 
-Put the package name, version code, device/OS, and exact test steps in the video
-description. The permission declaration requires a review video even if no public
-store preview video is used.
+Put package name, version code/name, device/OS, and exact test steps in the video
+description. Keep this separate from any public marketing video.
 
 ### Likely reviewer objection and response
 
 **Objection:** Users can share or pick images, so broad access is only convenience.
 
-**Response:** The app listing and first-run experience make recurring screenshot-library
-analysis the product itself. A picker supports a degraded manual import path, but cannot
-perform the advertised bounded history scan or notice new screenshots. Demonstrate both
-in the video. If Play still rejects the declaration, ship the picker/share build without
-`READ_MEDIA_IMAGES`; do not repeatedly resubmit unchanged wording.
+**Response:** The listing and first-run experience make recurring screenshot-library
+analysis the product itself. Picker/share support is a degraded manual path; it cannot
+perform the promoted bounded history scan or recurring screenshot query. Demonstrate
+both. If Play rejects the declaration, ship the picker/share-only build without
+`READ_MEDIA_IMAGES`; do not repeatedly submit unchanged wording.
+
+## Health apps declaration
+
+- Complete the declaration for every track, including testing tracks.
+- Select **Period tracking**. Habits alone may be general productivity, but menstrual
+  flow logging and cycle timing estimates unambiguously match Play's category.
+- Describe Track as local logging and an estimate based on prior entries. Do not claim
+  fertility, diagnosis, treatment, prevention, clinical accuracy, or guaranteed timing.
+- Add this store-description disclaimer unless qualified counsel requires stronger text:
+
+> Shotlist's cycle estimates are for general informational use. Shotlist is not a
+> medical device and does not diagnose, treat, cure, or prevent any medical condition.
+
+- Add menstrual-flow entries, derived cycle timing, habit names/ticks, storage,
+  retention, deletion, and any user-initiated sharing to both privacy policies.
+- Confirm the intended age rating and regional availability after the health feature
+  set is frozen.
 
 ## Store listing
+
+The draft below reflects current main. Remove any feature cut from the release AAB. Do
+not mention Pro until a real purchase/restore path exists; if the Free limits remain,
+the listing and in-app product presentation must explain them honestly.
 
 ### Metadata
 
 - App name: `Shotlist`
-- Category: `Productivity`
-- Tags: choose only current utility/productivity tags exposed by Play Console.
-- Ads: `No` for the current build.
-- Target audience: `13 and older`; select `Not designed for children`.
-- App access: `All functionality is available without special access`.
-- Content rating: complete the questionnaire against local user-provided screenshot
-  content; do not treat local screenshots as public user-generated content.
+- Primary category: `Productivity`
+- Ads: `No`
+- Target audience: `13 and older`; `Not designed for children`
+- App access: no account or developer credential; tell reviewers that vault testing
+  uses the device's own screen lock.
+- Content rating: answer against local user-provided screenshot and period data; do not
+  misclassify local screenshots as public user-generated content.
 
 ### Short description
 
-> Turn screenshot dates and codes into useful, reviewable action cards.
+> Turn screenshots and scans into useful actions—privately, on your device.
 
 ### Full description
 
-> Your screenshots already contain plans, deadlines, addresses, tickets, and codes.
-> Shotlist turns that information into something you can use.
+> Your screenshots already contain plans, deadlines, addresses, tickets, links, and
+> codes. Shotlist turns that information into something you can use.
 >
-> Shotlist's main job is to scan screenshots on your device, read their text, and make
-> reviewable action cards. Scan your existing screenshot history, then deal with useful
-> finds from one focused Inbox.
+> FIND IT AGAIN
 >
-> WHAT SHOTLIST DOES
+> • Scan a bounded screenshot history into a focused Inbox
 >
-> • Finds dates, times, deadlines, event addresses, and short codes in screenshots  
-> • Opens a prefilled calendar event only after you tap an event card  
-> • Copies codes when you need them  
-> • Lets you dismiss or snooze findings that are not useful  
-> • Accepts individual images from Android's share menu  
-> • Offers a selected-image import path when you prefer not to grant full access
+> • Search recognized screenshot text with Recall
+>
+> • Review details before opening calendar, maps, links, contacts, or copy actions
+>
+> • Review stale screenshots before sending them to Android's trash
+>
+> SCAN WHAT IS IN FRONT OF YOU
+>
+> • Capture printed text with the Anything camera
+>
+> • Read QR codes for links, Wi-Fi, contacts, and events
+>
+> • Scan paper into a cleaned, shareable PDF on supported Google Play services devices
+>
+> TRACK YOUR RHYTHM
+>
+> • Log menstrual flow days and view locally calculated cycle estimates
+>
+> • Build simple habits and streaks
+>
+> • Keep cycle and habit entries in Shotlist's private on-device database
 >
 > PRIVATE BY DESIGN
 >
 > Screenshot OCR and classification happen on your device. Screenshot contents and
 > extracted text are not sent to Shotlist servers. There is no Shotlist account, no ad
-> profile, and no sale of screenshot data.
+> profile, and no sale of screenshot data. Sensitive codes can be kept behind your
+> device screen lock, and Delete all my data clears Shotlist's local database and files.
 >
 > WHY PHOTO ACCESS?
 >
-> Shotlist uses photo access for its core function: finding and repeatedly processing
-> images in your Screenshots collection. Full access enables the initial history scan
-> and detection of new screenshots while Shotlist is active. If you decline, you can
-> still import selected images or share individual screenshots to the app.
+> Full image access powers the initial screenshot history scan and recurring catch-up.
+> If you decline, you can still import selected images or share individual screenshots.
 >
-> You stay in control. Shotlist never saves a calendar event without your confirmation,
-> and you can revoke photo access at any time in Android Settings.
-
-The Photo Picker claims now match the shipping control. Until reliable closed-app
-ingest ships, retain the qualifier `while Shotlist is active`.
+> Shotlist never saves a calendar event or trashes a screenshot without your explicit
+> Android confirmation. Permissions can be revoked at any time in Android Settings.
+>
+> Shotlist's cycle estimates are for general informational use. Shotlist is not a
+> medical device and does not diagnose, treat, cure, or prevent any medical condition.
 
 ### First release notes
 
-> Meet Shotlist: scan screenshots for dates, deadlines, event details, and codes; review useful
-> finds in one Inbox; and turn them into actions without uploading screenshot contents.
+> Meet Shotlist: turn screenshots and camera scans into useful actions, search what you
+> forgot, keep sensitive finds private, and track simple rhythms—all without a Shotlist
+> account.
 
 ## Data Safety form
 
-The product is local-first and its manifest now strips ordinary network permissions.
-That is strong evidence, but Play's current ML Kit disclosure still says the SDK collects
-limited telemetry even for bundled features. Choose the form answer from measured release
-behavior, not from either claim in isolation.
+Play says solely on-device access is not collection. Shotlist's local screenshot text,
+documents, codes, cycle entries, and habits therefore should not be declared as
+collected **only if release verification confirms they never leave the device**.
+Google's current ML Kit disclosure separately describes operational SDK data.
 
 ### Conservative answer before release verification
 
-| Console question | Answer | Basis |
+| Console question | Conservative answer | Basis |
 | --- | --- | --- |
-| Does the app collect or share required user-data types? | `Yes — collects` | ML Kit documents SDK telemetry; this avoids under-declaring while actual release transport remains unverified. |
-| Is user data shared with third parties? | `No` | ML Kit describes the data as not shared with third parties; treat Google as the processing SDK/service provider for this function. User-initiated calendar/maps transfers are excluded from “sharing” when the user reasonably expects them. |
-| Is data encrypted in transit? | `Yes` | ML Kit documents HTTPS for its collected telemetry. |
-| Can users request deletion? | Do not claim an in-app mechanism yet. | There is no account or developer server, but the app still needs a clear local `Delete all data` control and a public contact method before submission. |
-| Does the app follow the Families policy? | `No / not applicable` | The proposed audience is 13+ and not designed for children. |
+| Does the app collect or share required user-data types? | `Yes — collects` | Google's ML Kit disclosure lists app/device information, performance metrics, API configuration, event/error data, and identifiers. |
+| Is user data shared with third parties? | `No`, if the exact SDK Index treatment agrees | Google describes this operational data as not transferred to third parties. User-initiated calendar/maps/share actions may qualify for Play's expected-action exceptions. |
+| Is data encrypted in transit? | `Yes` for declared ML Kit operational data | Google documents HTTPS. |
+| Can users request deletion? | Do not claim deletion of ML Kit telemetry without a verified mechanism. Separately state that `Delete all my data` erases Shotlist's local database/files. | The in-app control now exists, but it cannot be assumed to erase operational data already handled by Google. |
+| Does the app follow the Families policy? | `No / not applicable` | Proposed audience is 13+ and not designed for children. |
 
-Declare these types conservatively, then reconcile them against the SDK Index entry and
-the exact Play form shown for the release AAB:
+Declare these operational types conservatively, then reconcile them against the exact
+dependency set and current Play form:
 
 | Data type | Collected | Shared | Required | Purpose |
 | --- | --- | --- | --- | --- |
-| Device or other identifiers | Yes | No | Yes while ML Kit is present | Analytics; diagnostics/app functionality as offered by the form |
-| App info and performance / Diagnostics | Yes | No | Yes while ML Kit is present | Diagnostics |
-| App info and performance / Other app performance data | Yes if listed by the current ML Kit SDK entry | No | Yes while ML Kit is present | Analytics and diagnostics |
+| Device or other identifiers | Yes | No | Yes while affected ML Kit SDKs are present | Analytics; diagnostics/app functionality as offered by the form |
+| App info and performance / Diagnostics | Yes | No | Yes | Diagnostics |
+| App info and performance / Other performance data | Yes if listed by the SDK Index/form | No | Yes | Analytics and diagnostics |
 
-Do **not** mark photos/videos, OCR text, calendar data, location, codes, or other
-screenshot-derived content as collected if the final binary keeps those data solely on
-device. On-device-only access is outside Play's definition of collection. User-confirmed
-transfer to the Android calendar or maps app is a user-initiated action and is excluded
-from the form's definition of sharing.
-
-Before submitting, verify the ML Kit disclosure for the exact dependency version. SDK
-behavior can change independently of Shotlist code.
+Do not mark photos/videos, OCR text, document contents, calendar data, locations, codes,
+menstrual-flow entries, cycle estimates, or habits as collected if the exact release
+keeps them solely on-device. User-confirmed transfer to another app is handled according
+to Play's expected-action exceptions and must still be described in the privacy policy.
 
 ### No-collection answer after verification
 
-The merge-level removal of `INTERNET` and `ACCESS_NETWORK_STATE` is necessary evidence,
-but not sufficient on its own. Only use the answers below if all of these are true:
+Only answer `Data collected: No` and `Data shared: No` if all are true:
 
-- the exact release AAB's merged manifest contains neither permission;
-- release-mode traffic and IPC inspection on a device with Google Play services finds
-  no ML Kit telemetry leaving the app or being handed to another process;
-- Play Console's SDK Index and pre-review checks do not indicate a conflicting required
-  disclosure;
-- backup of screenshot-derived data is disabled or excluded; and
+- the exact AAB's merged manifest contains neither `INTERNET` nor
+  `ACCESS_NETWORK_STATE`;
+- release traffic and IPC inspection, including Docs through Google Play services,
+  finds no relevant operational transfer attributable to the app/SDK use;
+- SDK Index and Play pre-review checks do not require conflicting disclosure;
+- backup remains disabled/excluded; and
 - no other dependency or platform integration transmits user data.
 
-Then the form may say:
-
-- Data collected: `No`
-- Data shared: `No`
-- Screenshot access/processing: local-only and therefore not declared as collection
-
-Even in that configuration, the Data Safety form and a privacy-policy URL are required.
+The Data Safety form and public privacy-policy URL remain required either way.
 
 ### Other App content answers
 
-- Privacy policy: required in Play Console and inside the app.
+- Privacy policy: required in Play Console and inside the app; current public URL is
+  missing.
 - Ads: no.
-- App access: no login or restricted feature.
-- Data deletion: no account deletion section is needed unless account creation ships;
-  still provide local deletion and a support contact.
-- Government apps: no.
-- Financial features: no.
-- Health apps: no for this release. Re-answer before any cycle, calorie, or health
-  tracking module ships.
-- News/magazine: no.
-- COVID-19/contact tracing: no.
+- App access: no login; provide the device-lock note for vault review.
+- Data deletion: no account-deletion section unless account creation ships; document
+  local deletion and a support/privacy contact.
+- Health apps: **Yes — Period tracking**.
+- Medical device: no intended medical-device function; include the disclaimer above.
+- Government, financial, news/magazine, and COVID-19/contact tracing: no.
 
 ## Screenshot and preview plan
 
-Use six 1080 × 1920 portrait images. Play requires at least two phone screenshots; four
-high-resolution 9:16 screenshots are recommended for broader promotional eligibility.
-Use JPEG or 24-bit PNG without alpha and keep every image an honest representation of
-the shipping build.
+Use only fabricated fixtures and capture the exact release build. A focused six-image
+set is preferable to advertising every secondary feature:
 
-| Order | Headline | Actual screen/evidence | Purpose |
-| --- | --- | --- | --- |
-| 1 | `Your screenshots become things that happen` | Inbox with one event, one deadline, and one code card | Explain the product in one glance. |
-| 2 | `Find what you forgot` | Onboarding reveal with fabricated scan/useful counts | Show the history-rescue moment. |
-| 3 | `Add the plan in one tap` | Event action card immediately before the calendar insert action | Show the concrete payoff. |
-| 4 | `Codes and deadlines, ready when you need them` | Two real action-card states with fake data | Broaden utility without promising future modules. |
-| 5 | `Screenshot contents stay on your phone` | Privacy/disclosure screen using the production wording | Build trust without the false zero-network claim. |
-| 6 | `Full scan or selected import — your choice` | Production permission-choice screen after Photo Picker ships | Demonstrate consent and fallback. |
+| Order | Headline | Actual screen/evidence |
+| --- | --- | --- |
+| 1 | `Your screenshots become useful actions` | Inbox with one fabricated event, deadline, and code |
+| 2 | `Find what you forgot` | Recall results for a fabricated phrase, with no real sensitive text |
+| 3 | `Scan text, QR, or paper` | Scan mode selector plus a fabricated successful result |
+| 4 | `Review before anything happens` | Finding detail immediately before a user-confirmed action |
+| 5 | `Private rhythms, kept on your phone` | Track with fabricated flow/habit data and no medical claim |
+| 6 | `Full scan or selected import—your choice` | Final production permission disclosure/import fallback |
 
 Asset checklist:
 
-- Store icon: 512 × 512, 32-bit PNG with alpha, at most 1 MB.
-- Feature graphic: 1024 × 500, JPEG or 24-bit PNG without alpha.
-- Phone screenshots: at least two; use six at 1080 × 1920.
-- Public preview video: optional. If used, make the first 15 seconds show screenshot →
-  action with no logo animation or feature roadmap.
-- Permission review video: required and separate from the marketing plan above.
-- Keep actual UI prominent in the first three screenshots; avoid device frames, tiny
-  text, fake notifications, rankings, prices, awards, and features not in the AAB.
-- Use one consistent fabricated fixture set across screenshots and video so reviewers
-  can reproduce it.
+- Store icon: 512×512 32-bit PNG with alpha, at most 1 MB.
+- Feature graphic: 1024×500 JPEG or 24-bit PNG without alpha.
+- Phone screenshots: at least two; use six consistent high-resolution portrait assets.
+- Permission review video: separate from optional public marketing video.
+- Keep real UI prominent; avoid tiny text, fake notifications, prices, awards,
+  rankings, roadmap features, or anything not in the AAB.
+- Use one fabricated fixture set across screenshots and video so review is reproducible.
 
 ## Submission sequence
 
-1. Resolve every P0 blocker and freeze the feature set.
-2. Build the signed API-36 release AAB and inspect its merged manifest and SDK Index.
-3. Run release-mode network capture and on-device storage/backup tests.
-4. Publish the privacy policy and wire the same URL inside the app.
-5. Capture final screenshots from the exact release candidate.
-6. Record the permissions video from a clean install of that candidate.
-7. Upload the AAB to Internal testing and complete all App content forms.
-8. Submit the photo permission declaration and allow several weeks for extended review.
-9. If rejected, use the prepared picker/share-only build without broad image permission
-   rather than delaying all distribution.
-10. After approval, use a staged production rollout and watch Android vitals.
+1. Freeze the release feature set and resolve the unreachable Pro experience.
+2. Fix the prominent photo disclosure and notification request context.
+3. Reconcile and publish the privacy policy, including health and Play services data.
+4. Complete the Period tracking Health apps declaration and add the non-medical
+   disclaimer.
+5. Build the signed API-36 release AAB and inspect its merged manifest, dependencies,
+   SDK Index, and Play pre-review output.
+6. Run release-mode traffic/IPC, storage/deletion, backup, and device-matrix tests.
+7. Capture final store assets and permission video from that exact candidate.
+8. Upload to Internal testing and complete Data Safety, App content, content rating,
+   app access, and photo permission forms.
+9. If broad photo access is rejected, switch to the prepared picker/share-only build.
+10. Use staged production rollout and monitor Android vitals and policy feedback.
 
-## Policy sources
+## Official policy and SDK sources
 
-Official sources checked on 2026-08-31:
+Verified on 2026-09-01:
 
 - [Permissions and APIs that access sensitive information](https://support.google.com/googleplay/android-developer/answer/16558241)
-- [Restricted permissions and minimum-scope alternatives](https://support.google.com/googleplay/android-developer/answer/16935362)
-- [Permissions declaration process](https://support.google.com/googleplay/android-developer/answer/9214102)
+- [Photo and Video Permissions policy details](https://support.google.com/googleplay/android-developer/answer/14115180)
 - [User Data policy and prominent disclosure](https://support.google.com/googleplay/android-developer/answer/10144311)
 - [Data Safety form guidance](https://support.google.com/googleplay/android-developer/answer/10787469)
+- [Health Content and Services](https://support.google.com/googleplay/android-developer/answer/16679511)
+- [Health apps declaration form](https://support.google.com/googleplay/android-developer/answer/14738291)
+- [Health app categories](https://support.google.com/googleplay/android-developer/answer/13996367)
 - [ML Kit data disclosure](https://developers.google.com/ml-kit/android-data-disclosure)
-- [ML Kit terms and privacy](https://developers.google.com/ml-kit/terms)
+- [ML Kit document scanner](https://developers.google.com/ml-kit/vision/doc-scanner/android)
 - [Google Play target API requirements](https://developer.android.com/google/play/requirements/target-sdk)
 - [Google Play preview-asset requirements](https://support.google.com/googleplay/android-developer/answer/9866151)
-- [Store listing best practices](https://support.google.com/googleplay/android-developer/answer/13393723)
 
-Policy and SDK disclosures change. Recheck all links against the exact release date and
-bundle; this document is preparation, not a guarantee of Play approval.
+Policy, SDK disclosures, and Play Console wording change independently of the code.
+Recheck every answer against the exact release date and AAB; this is a preparation
+record, not a guarantee of approval or legal advice.
