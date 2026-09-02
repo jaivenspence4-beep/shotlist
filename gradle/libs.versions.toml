@@ -1,5 +1,7 @@
 [versions]
 healthConnect = "1.1.0"
+guava = "31.1-android"
 
 [libraries]
 androidx-health-connect-client = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
+google-guava = { module = "com.google.guava:guava", version.ref = "guava" }

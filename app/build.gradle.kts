@@ -78,6 +78,10 @@ dependencies {
 
     // Stable, on-device Health Connect transport for the optional Metabolic Lens.
     implementation(libs.androidx.health.connect.client)
+    // Health Connect's runtime Guava graph otherwise selects the intentionally
+    // empty listenablefuture conflict shim on the compile classpath. CameraX's
+    // public ProcessCameraProvider API exposes the real ListenableFuture type.
+    implementation(libs.google.guava)
 
     // Liquid glass: real backdrop blur with graceful pre-12 fallback
     implementation("dev.chrisbanes.haze:haze:1.5.3")
