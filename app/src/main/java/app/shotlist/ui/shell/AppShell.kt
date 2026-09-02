@@ -2,6 +2,7 @@ package app.shotlist.ui.shell
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -106,7 +107,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.work.WorkManager
-import app.shotlist.BuildConfig
 import app.shotlist.MainActivity
 import app.shotlist.actions.ActionKind
 import app.shotlist.actions.ShotlistAction
@@ -211,6 +211,9 @@ private fun AppShellContent(
     val prefs = remember(context) {
         context.getSharedPreferences("shotlist_onboarding", android.content.Context.MODE_PRIVATE)
     }
+    val isDebugBuild = remember(context) {
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     var onboardingComplete by rememberSaveable {
         mutableStateOf(prefs.getBoolean("complete", false))
     }
@@ -234,7 +237,7 @@ private fun AppShellContent(
     val vaultedFindings by db.findings().vaulted().collectAsState(initial = emptyList())
     var entitlement by remember(prefs) {
         mutableStateOf(
-            if (BuildConfig.DEBUG) {
+            if (isDebugBuild) {
                 Entitlement.fromStored(prefs.getString(Entitlement.DEBUG_PREF_KEY, null))
             } else {
                 Entitlement.FREE
@@ -592,11 +595,11 @@ private fun AppShellContent(
                         palette = palette,
                         livingScene = livingScene,
                         entitlement = entitlement,
-                        showEntitlementPreview = BuildConfig.DEBUG,
+                        showEntitlementPreview = isDebugBuild,
                         onPaletteChanged = onPaletteChanged,
                         onLivingSceneChanged = onLivingSceneChanged,
                         onEntitlementChanged = { newEntitlement ->
-                            if (BuildConfig.DEBUG) {
+                            if (isDebugBuild) {
                                 entitlement = newEntitlement
                                 prefs.edit()
                                     .putString(Entitlement.DEBUG_PREF_KEY, newEntitlement.name)
@@ -749,7 +752,7 @@ private fun AppShellContent(
         ProPreviewSheet(
             reason = reason,
             hazeState = hazeState,
-            showDebugHint = BuildConfig.DEBUG,
+            showDebugHint = isDebugBuild,
             onDismiss = { proPreviewReason = null },
         )
     }
