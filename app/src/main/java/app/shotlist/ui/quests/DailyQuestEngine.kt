@@ -2,6 +2,8 @@ package app.shotlist.ui.quests
 
 import android.content.Context
 import app.shotlist.data.ShotlistDb
+import app.shotlist.onboarding.FocusArea
+import app.shotlist.onboarding.OnboardingPreferences
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -100,7 +102,13 @@ object DailyQuestEngine {
         ) { suggested, handled, scans, day ->
             SourceSnapshot(day, suggested, handled, scans)
         }.map { source ->
-            evaluationMutex.withLock { evaluate(prefs, source) }
+            evaluationMutex.withLock {
+                evaluate(
+                    prefs = prefs,
+                    source = source,
+                    focusAreas = OnboardingPreferences.read(appContext),
+                )
+            }
         }.distinctUntilChanged()
             .flowOn(Dispatchers.IO)
     }
@@ -108,6 +116,7 @@ object DailyQuestEngine {
     private fun evaluate(
         prefs: android.content.SharedPreferences,
         source: SourceSnapshot,
+        focusAreas: List<FocusArea>,
     ): QuestDashboard {
         val storedDay = prefs.getString(KEY_DAY, null)
         val today = source.day.toString()
@@ -124,10 +133,16 @@ object DailyQuestEngine {
         val baselineHandled = prefs.getInt(KEY_BASE_HANDLED, source.handled)
         val baselineScans = prefs.getInt(KEY_BASE_SCANS, source.scans)
         val baselineSuggested = prefs.getInt(KEY_BASE_SUGGESTED, source.suggested)
-        val quests = buildList {
+        val availableQuests = buildList {
             add(DailyQuest.HANDLE_THREE)
             add(DailyQuest.SCAN_ONE)
             if (baselineSuggested > 0) add(DailyQuest.CLEAR_INBOX)
+        }
+        val preferredOrder = OnboardingPreferences.preferredQuestKeys(focusAreas)
+            .withIndex()
+            .associate { it.value to it.index }
+        val quests = availableQuests.sortedBy { quest ->
+            preferredOrder[quest.key] ?: Int.MAX_VALUE
         }
         val rawProgress = mapOf(
             DailyQuest.HANDLE_THREE to (source.handled - baselineHandled).coerceAtLeast(0),

@@ -119,6 +119,7 @@ import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.entitlement.Entitlement
 import app.shotlist.onboarding.OnboardingFlow
+import app.shotlist.onboarding.OnboardingPreferences
 import app.shotlist.ui.collections.CollectionTarget
 import app.shotlist.ui.collections.CollectionsScreen
 import app.shotlist.ui.collections.PinToCollectionSheet
@@ -355,8 +356,17 @@ private fun AppShellContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val actions = remember(findings) {
-        findings.map { it.toShotlistAction() }
+    val focusAreas = remember(onboardingComplete) {
+        OnboardingPreferences.read(context)
+    }
+    val actions = remember(findings, focusAreas) {
+        findings.withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<Finding>> {
+                    OnboardingPreferences.findingPriority(it.value.type, focusAreas)
+                }.thenBy { it.index },
+            )
+            .map { it.value.toShotlistAction() }
     }
     LaunchedEffect(detailFinding?.shotId) {
         detailShot = detailFinding?.let { db.shots().byId(it.shotId) }
