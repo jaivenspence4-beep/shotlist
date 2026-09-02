@@ -38,9 +38,11 @@ object MemoryEngine {
                 if (prefs.getBoolean("dismissed_${shot.id}", false)) return@forEach
                 val findings = db.findings().forShot(shot.id)
                     .filter { it.state != "DISMISSED" }
-                // Vaulted-only shots stay private; require something showable.
-                if (findings.isNotEmpty() && findings.any { !it.vaulted }) {
-                    return Memory(shot, findings.filter { !it.vaulted }, label)
+                // A shot with ANY vaulted finding never becomes a memory: the
+                // raw pixels would expose the secret even if the text list is
+                // filtered (Codex t71 catch — mixed-vault screenshots).
+                if (findings.isNotEmpty() && findings.none { it.vaulted }) {
+                    return Memory(shot, findings, label)
                 }
             }
         }
