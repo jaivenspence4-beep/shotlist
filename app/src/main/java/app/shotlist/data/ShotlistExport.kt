@@ -18,14 +18,23 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Streams a complete, user-initiated snapshot without copying screenshot pixels. */
+/**
+ * Streams a complete, user-initiated snapshot without copying screenshot pixels.
+ *
+ * Health tables never ride along with the standard export: they are written
+ * only when [shareIntent] is asked for them, as their own files, after the
+ * caller has cleared the biometric gate and the second confirmation.
+ */
 object ShotlistExport {
     private const val EXPORT_DIR = "shared_cards"
     private const val EXPORT_PREFIX = "shotlist-data-"
+    private const val HEALTH_TABLE_PREFIX = "glucose_"
+    const val HEALTH_SAMPLES_FILE = "glucose_samples.json"
+    const val HEALTH_MOMENTS_FILE = "glucose_moments.json"
 
-    suspend fun shareIntent(context: Context): Intent = withContext(Dispatchers.IO) {
+    suspend fun shareIntent(context: Context, includeHealth: Boolean = false): Intent = withContext(Dispatchers.IO) {
         val appContext = context.applicationContext
-        val file = createZip(appContext)
+        val file = createZip(appContext, includeHealth)
         val uri = FileProvider.getUriForFile(
             appContext,
             "${appContext.packageName}.files",
@@ -46,7 +55,7 @@ object ShotlistExport {
         sharedDirectory.delete()
     }
 
-    private fun createZip(context: Context): File {
+    private fun createZip(context: Context, includeHealth: Boolean): File {
         val directory = exportDirectory(context)
         directory.mkdirs()
         directory.listFiles().orEmpty().filter(::isExportFile).forEach { it.delete() }
@@ -56,11 +65,12 @@ object ShotlistExport {
         val database = ShotlistDb.get(context).openHelper.readableDatabase
         database.beginTransaction()
         try {
-            val tables = userTables(database)
+            val tables = exportableTables(allTables(database))
             ZipOutputStream(FileOutputStream(output).buffered()).use { zip ->
                 writeDataJson(zip, database, tables)
                 writeImagesJson(zip, database)
-                writeReadme(zip, tables)
+                if (includeHealth) writeHealthJson(zip, database)
+                writeReadme(zip, tables, includeHealth)
             }
             database.setTransactionSuccessful()
         } catch (error: Throwable) {
@@ -137,7 +147,61 @@ object ShotlistExport {
         zip.closeEntry()
     }
 
-    private fun writeReadme(zip: ZipOutputStream, tables: List<String>) {
+    /**
+     * Glucose rows go in their own files so a reader can never mistake them for
+     * ordinary app data. Values stay in the canonical mmol/L; the sync row
+     * (Health Connect token, chosen source) is not user data and is never written.
+     */
+    private fun writeHealthJson(zip: ZipOutputStream, database: SupportSQLiteDatabase) {
+        writeHealthFile(zip, HEALTH_SAMPLES_FILE, "samples", database, "glucose_samples", "observedAt") { writer ->
+            writer.name("unit").value("mmol/L")
+            writer.name("note").value(
+                "Glucose readings copied from Health Connect exactly as the source app wrote them. " +
+                    "mmolPerLiter is the stored value; mg/dL shown in the app is mmolPerLiter x 18.0182, rounded.",
+            )
+        }
+        writeHealthFile(zip, HEALTH_MOMENTS_FILE, "moments", database, "glucose_moments", "occurredAt") { writer ->
+            writer.name("note").value("Meal, walk and note markers you added in Metabolic Lens.")
+        }
+    }
+
+    private fun writeHealthFile(
+        zip: ZipOutputStream,
+        fileName: String,
+        arrayName: String,
+        database: SupportSQLiteDatabase,
+        table: String,
+        orderBy: String,
+        header: (JsonWriter) -> Unit,
+    ) {
+        zip.putNextEntry(ZipEntry(fileName))
+        val writer = JsonWriter(OutputStreamWriter(zip, StandardCharsets.UTF_8)).apply {
+            setIndent("  ")
+        }
+        writer.beginObject()
+        writer.name("formatVersion").value(1L)
+        writer.name("exportedAt").value(Instant.now().toString())
+        header(writer)
+        writer.name(arrayName).beginArray()
+        database.query(
+            "SELECT * FROM ${quoteIdentifier(table)} ORDER BY ${quoteIdentifier(orderBy)}",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                writer.beginObject()
+                cursor.columnNames.forEachIndexed { index, column ->
+                    writer.name(column)
+                    writeCursorValue(writer, cursor, index)
+                }
+                writer.endObject()
+            }
+        }
+        writer.endArray()
+        writer.endObject()
+        writer.flush()
+        zip.closeEntry()
+    }
+
+    private fun writeReadme(zip: ZipOutputStream, tables: List<String>, includeHealth: Boolean) {
         zip.putNextEntry(ZipEntry("README.txt"))
         val text = buildString {
             appendLine("Shotlist local data export")
@@ -145,6 +209,17 @@ object ShotlistExport {
             appendLine("shotlist-data.json contains every local user-data table present at export time.")
             appendLine("images.json lists original image references; this ZIP contains no screenshot pixels.")
             appendLine("Vaulted values are included only after the in-app private-data confirmation.")
+            appendLine()
+            if (includeHealth) {
+                appendLine("HEALTH DATA WARNING")
+                appendLine("$HEALTH_SAMPLES_FILE and $HEALTH_MOMENTS_FILE contain glucose readings copied from")
+                appendLine("Health Connect and the moments you marked. This is sensitive health information about you.")
+                appendLine("Keep this ZIP only where you control it, and delete it when you are done with it.")
+                appendLine("Values are in mmol/L. This export is not medical advice and is not a medical record.")
+            } else {
+                appendLine("Health data (Metabolic Lens) is not in this ZIP. It is only ever included when you")
+                appendLine("unlock the vault and choose \"Include health data\" for that one export.")
+            }
             appendLine()
             appendLine("Tables: ${tables.joinToString(", ")}")
         }
@@ -165,17 +240,20 @@ object ShotlistExport {
         }
     }
 
-    private fun userTables(database: SupportSQLiteDatabase): List<String> =
+    private fun allTables(database: SupportSQLiteDatabase): List<String> =
         buildList {
             database.query(
                 "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
             ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val name = cursor.getString(0)
-                    if (!isInternalTable(name)) add(name)
-                }
+                while (cursor.moveToNext()) add(cursor.getString(0))
             }
         }
+
+    /** The standard export: every user table except bookkeeping and health. */
+    internal fun exportableTables(names: List<String>): List<String> =
+        names.filterNot { isInternalTable(it) || isHealthTable(it) }
+
+    internal fun isHealthTable(name: String): Boolean = name.startsWith(HEALTH_TABLE_PREFIX)
 
     private fun isInternalTable(name: String): Boolean =
         name == "android_metadata" ||

@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.WifiPassword
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -92,6 +93,7 @@ fun YouScreen(
     vaultedFindings: List<Finding>,
     vaultTotalCount: Int,
     vaultUnlocked: Boolean,
+    healthRecordCount: Int,
     imageAccessGranted: Boolean,
     autoScanEnabled: Boolean,
     palette: ShotlistPalette,
@@ -119,6 +121,10 @@ fun YouScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showPrivateExportDialog by remember { mutableStateOf(false) }
+    var showHealthGateDialog by remember { mutableStateOf(false) }
+    var showHealthConfirmDialog by remember { mutableStateOf(false) }
+    // Always starts unchecked: health data is opted into per export, never remembered.
+    var includeHealthInExport by remember { mutableStateOf(false) }
     var exportInProgress by remember { mutableStateOf(false) }
     var exportError by remember { mutableStateOf<String?>(null) }
     var lastImportCount by remember { mutableStateOf<Int?>(null) }
@@ -132,14 +138,15 @@ fun YouScreen(
     }
     val hiddenVaultCount = (vaultTotalCount - vaultedFindings.size).coerceAtLeast(0)
 
-    fun startExport() {
+    fun startExport(includeHealth: Boolean = false) {
         if (exportInProgress) return
+        includeHealthInExport = false
         scope.launch {
             exportInProgress = true
             exportError = null
             try {
                 runCatching {
-                    val send = ShotlistExport.shareIntent(context)
+                    val send = ShotlistExport.shareIntent(context, includeHealth = includeHealth)
                     context.startActivity(Intent.createChooser(send, "Share Shotlist data"))
                 }
                     .onFailure { error ->
@@ -147,6 +154,21 @@ fun YouScreen(
                     }
             } finally {
                 exportInProgress = false
+            }
+        }
+    }
+
+    /** Vault values and health rows both sit behind the same biometric gate. */
+    fun requestExport() {
+        val hasPrivate = vaultTotalCount > 0 || healthRecordCount > 0
+        when {
+            exportInProgress -> Unit
+            !hasPrivate -> startExport()
+            vaultTotalCount > 0 && !vaultUnlocked -> onOpenVault()
+            healthRecordCount > 0 && !vaultUnlocked -> showHealthGateDialog = true
+            else -> {
+                includeHealthInExport = false
+                showPrivateExportDialog = true
             }
         }
     }
@@ -595,17 +617,13 @@ fun YouScreen(
                         exportInProgress -> "Building ZIP…"
                         exportError != null -> exportError.orEmpty()
                         vaultTotalCount > 0 && !vaultUnlocked -> "Unlock vault first · private values are included"
+                        healthRecordCount > 0 && !vaultUnlocked -> "Health data stays out unless you unlock and choose it"
                         else -> "JSON + image references · no screenshot pixels"
                     },
                     accent = MaterialTheme.colorScheme.secondary,
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        when {
-                            exportInProgress -> Unit
-                            vaultTotalCount > 0 && !vaultUnlocked -> onOpenVault()
-                            vaultTotalCount > 0 -> showPrivateExportDialog = true
-                            else -> startExport()
-                        }
+                        requestExport()
                     },
                 )
                 HorizontalDivider(
@@ -629,7 +647,11 @@ fun YouScreen(
                 ActionRow(
                     icon = Icons.Outlined.DeleteForever,
                     title = "Delete all my data",
-                    detail = "Screenshots, finds, tracking, habits — everything",
+                    detail = if (healthRecordCount > 0) {
+                        "Screenshots, finds, tracking, habits, health data — everything"
+                    } else {
+                        "Screenshots, finds, tracking, habits — everything"
+                    },
                     accent = Color(0xFFFF788F),
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -646,7 +668,13 @@ fun YouScreen(
             icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null) },
             title = { Text("Delete everything?") },
             text = {
-                Text("This permanently clears Shotlist’s local database, settings, copied images, and diagnostic log. Your phone’s original screenshots stay untouched.")
+                Text(
+                    if (healthRecordCount > 0) {
+                        "This permanently clears Shotlist’s local database, settings, copied images, and diagnostic log, and removes Shotlist’s Health Connect access. Your phone’s original screenshots and Health Connect’s own records stay untouched."
+                    } else {
+                        "This permanently clears Shotlist’s local database, settings, copied images, and diagnostic log. Your phone’s original screenshots stay untouched."
+                    },
+                )
             },
             confirmButton = {
                 FilledTonalButton(
@@ -671,28 +699,141 @@ fun YouScreen(
     }
 
     if (showPrivateExportDialog) {
+        val hasVault = vaultTotalCount > 0
+        val hasHealth = healthRecordCount > 0
         AlertDialog(
             onDismissRequest = { showPrivateExportDialog = false },
             icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
-            title = { Text("Include private vault values?") },
+            title = { Text(if (hasVault) "Include private vault values?" else "Export your data?") },
             text = {
-                Text(
-                    "This ZIP includes vaulted codes, Wi-Fi details, and any other private payloads. Only share it somewhere you trust. Screenshot pixels are not included.",
-                )
+                Column {
+                    Text(
+                        if (hasVault) {
+                            "This ZIP includes vaulted codes, Wi-Fi details, and any other private payloads. Only share it somewhere you trust. Screenshot pixels are not included."
+                        } else {
+                            "JSON and image references only. Screenshot pixels are not included."
+                        },
+                    )
+                    if (hasHealth) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable(
+                                    role = Role.Checkbox,
+                                    onClickLabel = "Include health data",
+                                ) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    includeHealthInExport = !includeHealthInExport
+                                }
+                                .padding(vertical = 4.dp),
+                        ) {
+                            Checkbox(
+                                checked = includeHealthInExport,
+                                onCheckedChange = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    includeHealthInExport = it
+                                },
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text("Include health data", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Glucose readings and moments from Metabolic Lens, as separate files. Off unless you choose it.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                                )
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 FilledTonalButton(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         showPrivateExportDialog = false
-                        startExport()
+                        if (includeHealthInExport) showHealthConfirmDialog = true else startExport()
                     },
                 ) {
-                    Text("Include and export")
+                    Text(if (hasVault || includeHealthInExport) "Include and export" else "Export")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPrivateExportDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showHealthGateDialog) {
+        AlertDialog(
+            onDismissRequest = { showHealthGateDialog = false },
+            icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+            title = { Text("Health data stays out") },
+            text = {
+                Text(
+                    "Your glucose readings are never in a standard export. To include them, unlock first and then choose it for this one export.",
+                )
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showHealthGateDialog = false
+                        startExport()
+                    },
+                ) {
+                    Text("Export without it")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showHealthGateDialog = false
+                        onOpenVault()
+                    },
+                ) {
+                    Text("Unlock to choose")
+                }
+            },
+        )
+    }
+
+    if (showHealthConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showHealthConfirmDialog = false
+                includeHealthInExport = false
+            },
+            icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
+            title = { Text("Include glucose readings?") },
+            text = {
+                Text(
+                    "The ZIP will contain every glucose reading and moment stored on this phone, in mmol/L, with a warning file. This is sensitive health information — only share it somewhere you control.",
+                )
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showHealthConfirmDialog = false
+                        startExport(includeHealth = true)
+                    },
+                ) {
+                    Text("Include health data")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showHealthConfirmDialog = false
+                        includeHealthInExport = false
+                    },
+                ) {
                     Text("Cancel")
                 }
             },

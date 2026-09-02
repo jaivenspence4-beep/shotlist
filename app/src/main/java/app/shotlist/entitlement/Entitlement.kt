@@ -12,6 +12,11 @@ internal const val BILLING_LIVE = false
 /**
  * Local product policy only. Billing is deliberately not connected yet; a
  * debug-only switch may select either state so both experiences can be tested.
+ *
+ * Health features (the glucose module) are outside entitlement entirely: no
+ * history window, no item cap, no tier check, free forever. Nothing in this
+ * enum may grow a health-related limit, and health code never reads it —
+ * HealthQuarantineTest fails the build if either side crosses that line.
  */
 enum class Entitlement(
     val recallHistoryDays: Int?,

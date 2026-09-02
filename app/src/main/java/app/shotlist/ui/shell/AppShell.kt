@@ -124,6 +124,9 @@ import app.shotlist.actions.ShotlistActions
 import app.shotlist.data.Finding
 import app.shotlist.data.Shot
 import app.shotlist.data.ShotlistDb
+import app.shotlist.health.android.HealthConnectGateway
+import app.shotlist.health.api.GlucoseSync
+import app.shotlist.health.api.RoomGlucoseStore
 import app.shotlist.diag.Diag
 import app.shotlist.engine.EngineApi
 import app.shotlist.entitlement.Entitlement
@@ -286,6 +289,8 @@ private fun AppShellContent(
         entitlement.vaultItemLimit?.let { vaultedFindings.take(it) } ?: vaultedFindings
     }
     val shotCount by db.shots().count().collectAsState(initial = 0)
+    // Only a count crosses into the shell; health rows themselves never leave the module.
+    val healthRecordCount by db.glucose().sampleCount().collectAsState(initial = 0)
     // Recall temporarily replaces the tab subtree; keep each tab's saveable UI state
     // so returning does not feel like relaunching that tab.
     val tabStateHolder = rememberSaveableStateHolder()
@@ -715,6 +720,7 @@ private fun AppShellContent(
                         vaultedFindings = visibleVaultedFindings,
                         vaultTotalCount = vaultedFindings.size,
                         vaultUnlocked = vaultUnlocked,
+                        healthRecordCount = healthRecordCount,
                         imageAccessGranted = imageAccessGranted,
                         autoScanEnabled = autoScanEnabled,
                         palette = palette,
@@ -782,6 +788,10 @@ private fun AppShellContent(
                             WorkManager.getInstance(context).cancelAllWork()
                             scope.launch {
                                 withContext(Dispatchers.IO) {
+                                    // Health rows go first and Health Connect access is revoked
+                                    // best-effort; a provider failure never keeps local data.
+                                    GlucoseSync(HealthConnectGateway(context), RoomGlucoseStore(db.glucose()))
+                                        .deleteEverything()
                                     db.clearAllTables()
                                     context.filesDir.resolve("shared").deleteRecursively()
                                     context.filesDir.resolve("diag.log").delete()

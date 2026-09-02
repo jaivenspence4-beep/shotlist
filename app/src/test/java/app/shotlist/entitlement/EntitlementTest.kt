@@ -46,4 +46,18 @@ class EntitlementTest {
     fun `release fails closed to free when billing goes live`() {
         assertEquals(Entitlement.FREE, Entitlement.releaseDefault(billingLive = true))
     }
+
+    @Test
+    fun `no tier carries a health limit`() {
+        // The only limits that exist are Recall history and vault capacity; a
+        // health-shaped limit would have to be added here, and this pins that it is not.
+        Entitlement.entries.forEach { tier ->
+            val limits = listOf(tier.recallHistoryDays, tier.vaultItemLimit)
+            assertEquals(2, limits.size)
+        }
+        assertFalse(
+            Entitlement::class.java.declaredFields.any { it.name.contains("health", ignoreCase = true) ||
+                it.name.contains("glucose", ignoreCase = true) },
+        )
+    }
 }
