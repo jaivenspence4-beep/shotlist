@@ -54,6 +54,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Inbox
@@ -70,6 +71,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -128,6 +130,7 @@ import app.shotlist.ui.detail.FindingDetailSheet
 import app.shotlist.ui.glass.GlassPanel
 import app.shotlist.ui.glass.glassBackgroundBrush
 import app.shotlist.ui.liquidbg.LiquidBackground
+import app.shotlist.ui.notes.QuickNoteSheet
 import app.shotlist.ui.paywall.ProPreviewReason
 import app.shotlist.ui.paywall.ProPreviewSheet
 import app.shotlist.ui.quests.DailyQuestsCard
@@ -282,6 +285,7 @@ private fun AppShellContent(
     var recallOpen by rememberSaveable { mutableStateOf(false) }
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
     var collectionsOpen by rememberSaveable { mutableStateOf(false) }
+    var quickNoteOpen by rememberSaveable { mutableStateOf(false) }
 
     // Time Machine (t68): one memory card max; feed opens full-bleed.
     var memoriesOpen by rememberSaveable { mutableStateOf(false) }
@@ -459,7 +463,8 @@ private fun AppShellContent(
     }
 
     fun requestPrimaryAction(action: ShotlistAction) {
-        val shouldAskNotifications = Build.VERSION.SDK_INT >= 33 &&
+        val shouldAskNotifications = action.kind in setOf(ActionKind.Event, ActionKind.Deadline) &&
+            Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
@@ -783,6 +788,29 @@ private fun AppShellContent(
             )
         }
         AnimatedVisibility(
+            visible = Tab.entries[selected] == Tab.Inbox &&
+                !recallOpen && !shatterOpen && !memoriesOpen && !collectionsOpen &&
+                !quickNoteOpen && detailFinding == null && pendingShare == null &&
+                pendingCollectionTarget == null,
+            enter = fadeIn() + scaleIn(initialScale = 0.72f),
+            exit = fadeOut() + scaleOut(targetScale = 0.72f),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 22.dp, bottom = 92.dp),
+        ) {
+            SmallFloatingActionButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    quickNoteOpen = true
+                },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "Add quick note")
+            }
+        }
+        AnimatedVisibility(
             visible = successMessage != null,
             enter = fadeIn() + scaleIn(initialScale = 0.78f, animationSpec = spring()),
             exit = fadeOut() + scaleOut(targetScale = 0.9f),
@@ -839,6 +867,18 @@ private fun AppShellContent(
                 )
             }
         }
+    }
+
+    if (quickNoteOpen) {
+        QuickNoteSheet(
+            hazeState = hazeState,
+            onDismissRequest = { quickNoteOpen = false },
+            onSaved = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                quickNoteOpen = false
+                successMessage = "Note saved to Inbox"
+            },
+        )
     }
 
     detailFinding?.let { finding ->

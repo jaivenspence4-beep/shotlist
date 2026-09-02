@@ -26,7 +26,7 @@ fun Finding.toShotlistAction(): ShotlistAction {
             "CODE", "WIFI" -> "Sensitive value hidden. Tap Copy when you need it."
             else -> snippet.ifBlank { payload.ifBlank { type.lowercase().replaceFirstChar { it.uppercase() } } }
         },
-        source = "screenshot #$shotId",
+        source = if (type == "NOTE") "quick note" else "screenshot #$shotId",
         confidence = confidence,
         startsAt = whenAt?.let(Instant::ofEpochMilli),
         location = payload.takeIf { kind == ActionKind.Event || kind == ActionKind.Place },

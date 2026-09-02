@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
@@ -86,6 +87,8 @@ fun FindingDetailSheet(
     onDismissFinding: () -> Unit,
 ) {
     val locked = finding.vaulted && !vaultUnlocked
+    val isQuickNote = finding.type == "NOTE"
+    val kindLabel = if (isQuickNote) "Quick note" else detailKindLabel(action.kind)
     val accent = detailAccent(action.kind)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -128,14 +131,18 @@ fun FindingDetailSheet(
                                 fontWeight = FontWeight.Black,
                             )
                             Text(
-                                detailKindLabel(action.kind),
+                                kindLabel,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = accent,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
                         Text(
-                            "${(finding.confidence * 100).toInt().coerceIn(0, 100)}% match",
+                            if (isQuickNote) {
+                                "Manual"
+                            } else {
+                                "${(finding.confidence * 100).toInt().coerceIn(0, 100)}% match"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
                             modifier = Modifier
@@ -169,7 +176,7 @@ fun FindingDetailSheet(
                     Text(
                         text = if (locked) {
                             AnnotatedString(
-                                "This ${detailKindLabel(action.kind).lowercase()} is vaulted. Unlock to reveal the matched text.",
+                                "This ${kindLabel.lowercase()} is vaulted. Unlock to reveal the matched text.",
                             )
                         } else {
                             whySurfaced(finding, action, accent)
@@ -188,8 +195,8 @@ fun FindingDetailSheet(
                         )
                     } else {
                         DetailButton(
-                            text = detailPrimaryCta(action.kind),
-                            icon = detailPrimaryIcon(action.kind),
+                            text = if (isQuickNote) "Mark note handled" else detailPrimaryCta(action.kind),
+                            icon = if (isQuickNote) Icons.Outlined.EditNote else detailPrimaryIcon(action.kind),
                             accent = accent,
                             onClick = onPrimaryAction,
                         )
@@ -317,6 +324,23 @@ private fun SourcePreview(
                 Spacer(Modifier.width(7.dp))
                 Text("Unlock source")
             }
+        } else if (shot != null && shot.uri.isBlank()) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.align(Alignment.Center),
+            ) {
+                Icon(
+                    Icons.Outlined.EditNote,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(42.dp),
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "Written in Shotlist",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                )
+            }
         } else if (shot == null) {
             Text(
                 "Loading source screenshot…",
@@ -359,7 +383,7 @@ private fun ExtractedFields(finding: Finding, action: ShotlistAction, accent: Co
         action.email?.takeIf { it.isNotBlank() }?.let { add("Email" to it) }
         if (isEmpty()) {
             val fallback = finding.payload.ifBlank { finding.snippet.ifBlank { finding.title } }
-            add("Found" to fallback)
+            add((if (finding.type == "NOTE") "Note" else "Found") to fallback)
         }
     }
     Column(
@@ -416,6 +440,13 @@ private fun DetailButton(text: String, icon: ImageVector, accent: Color, onClick
 
 private fun whySurfaced(finding: Finding, action: ShotlistAction, accent: Color): AnnotatedString =
     buildAnnotatedString {
+        if (finding.type == "NOTE") {
+            append("You wrote this quick note: ")
+            pushStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold))
+            append(finding.snippet.ifBlank { finding.title })
+            pop()
+            return@buildAnnotatedString
+        }
         val label = detailKindLabel(action.kind).lowercase()
         val article = if (label.firstOrNull() in listOf('a', 'e', 'i', 'o', 'u')) "an" else "a"
         append("Shotlist recognized $article $label")
