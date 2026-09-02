@@ -498,6 +498,9 @@ private fun AppShellContent(
         recallOpen = false
         shatterOpen = false
     }
+    BackHandler(enabled = memoriesOpen) {
+        memoriesOpen = false
+    }
 
     Box(
         modifier = Modifier
@@ -547,13 +550,7 @@ private fun AppShellContent(
                 )
                 Spacer(Modifier.height(14.dp))
             }
-            if (memoriesOpen) {
-                Box(Modifier.weight(1f)) {
-                    app.shotlist.ui.memories.MemoriesFeed(
-                        onClose = { memoriesOpen = false },
-                    )
-                }
-            } else if (shatterOpen) {
+            if (shatterOpen) {
                 ShatterScreen(
                     hazeState = hazeState,
                     onClose = { shatterOpen = false },
@@ -771,6 +768,12 @@ private fun AppShellContent(
             LevelUpBurst(
                 level = dashboard.level.level,
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (memoriesOpen) {
+            app.shotlist.ui.memories.MemoriesFeed(
+                initialMemory = todayMemory,
+                onClose = { memoriesOpen = false },
             )
         }
     }
