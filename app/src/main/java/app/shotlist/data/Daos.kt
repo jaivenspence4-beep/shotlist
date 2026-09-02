@@ -97,7 +97,12 @@ interface ShotDao {
     suspend fun processedBetween(from: Long, until: Long): List<Shot>
 
     /** Memories feed: every shot that ever produced something, newest first. */
-    @Query("SELECT * FROM shots WHERE status = 'PROCESSED' ORDER BY takenAt DESC LIMIT 200")
+    @Query(
+        "SELECT * FROM shots WHERE status = 'PROCESSED' AND EXISTS (" +
+            "SELECT 1 FROM findings WHERE findings.shotId = shots.id " +
+            "AND findings.state != 'DISMISSED' AND findings.vaulted = 0) " +
+            "ORDER BY takenAt DESC LIMIT 200"
+    )
     fun processedTimeline(): kotlinx.coroutines.flow.Flow<List<Shot>>
 
     /** After a suggestion purge, shots with nothing left re-enter the pipeline. */

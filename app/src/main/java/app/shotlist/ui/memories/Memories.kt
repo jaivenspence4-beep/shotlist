@@ -117,12 +117,36 @@ fun MemoriesFeed(onClose: () -> Unit) {
             val pager = rememberPagerState(pageCount = { shots.size })
             VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
                 val shot = shots[page]
+                val finds by androidx.compose.runtime.produceState(
+                    initialValue = emptyList<app.shotlist.data.Finding>(), shot.id,
+                ) {
+                    value = runCatching { db.findings().forShot(shot.id) }
+                        .getOrDefault(emptyList())
+                        .filter { it.state != "DISMISSED" && !it.vaulted }
+                }
                 Box(Modifier.fillMaxSize()) {
-                    AsyncImage(
+                    coil.compose.SubcomposeAsyncImage(
                         model = shot.uri,
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
+                        error = {
+                            // Share-copies are deleted after OCR: the finds ARE
+                            // the memory when the pixels are gone.
+                            Column(
+                                Modifier.fillMaxSize().padding(32.dp),
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                finds.take(4).forEach {
+                                    Text(
+                                        it.title, color = Color.White,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
+                        },
                     )
                     Column(
                         Modifier
@@ -143,6 +167,13 @@ fun MemoriesFeed(onClose: () -> Unit) {
                             color = Color.White.copy(alpha = 0.8f),
                             style = MaterialTheme.typography.labelLarge,
                         )
+                        finds.take(3).forEach { f ->
+                            Text(
+                                f.title, color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

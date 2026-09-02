@@ -34,6 +34,7 @@ object MemoryEngine {
                 center - SLACK_DAYS * DAY_MS, center + SLACK_DAYS * DAY_MS,
             )
             shots.forEach { shot ->
+                if (shot.mediaId < 0) return@forEach // share-copy: file deleted after OCR
                 if (prefs.getBoolean("dismissed_${shot.id}", false)) return@forEach
                 val findings = db.findings().forShot(shot.id)
                     .filter { it.state != "DISMISSED" }

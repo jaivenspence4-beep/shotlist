@@ -53,11 +53,16 @@ class DigestWorker(
 
         if (dueToday.isEmpty() && expiringSoon.isEmpty()) return Result.success()
 
-        notify(ctx, dueToday, expiringSoon)
+        // Time Machine line joins an already-firing digest; a memory alone
+        // never pings (trust law: no hollow notifications).
+        val memoryLine = runCatching {
+            app.shotlist.engine.memories.MemoryEngine.todayMemory(ctx)
+        }.getOrNull()?.let { "${it.agoLabel}: ${it.findings.firstOrNull()?.title ?: "a moment you kept"}" }
+        notify(ctx, dueToday, expiringSoon, memoryLine)
         return Result.success()
     }
 
-    private fun notify(ctx: Context, due: List<Finding>, expiring: List<Finding>) {
+    private fun notify(ctx: Context, due: List<Finding>, expiring: List<Finding>, memoryLine: String? = null) {
         val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(
@@ -76,6 +81,7 @@ class DigestWorker(
                 add(if (at != null) "${f.title} · $at" else f.title)
             }
             expiring.take(2).forEach { add("Expiring soon: ${it.title}") }
+            memoryLine?.let { add("✦ $it") }
         }
         val title = when {
             due.isNotEmpty() && expiring.isNotEmpty() ->
