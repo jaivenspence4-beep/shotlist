@@ -256,6 +256,17 @@ private fun AppShellContent(
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var recallOpen by rememberSaveable { mutableStateOf(false) }
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Time Machine (t68): one memory card max; feed opens full-bleed.
+    var memoriesOpen by rememberSaveable { mutableStateOf(false) }
+    var todayMemory by remember {
+        mutableStateOf<app.shotlist.engine.memories.MemoryEngine.Memory?>(null)
+    }
+    LaunchedEffect(Unit) {
+        todayMemory = runCatching {
+            app.shotlist.engine.memories.MemoryEngine.todayMemory(context)
+        }.getOrNull()
+    }
     var successMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var detailFinding by remember { mutableStateOf<Finding?>(null) }
     var detailShot by remember { mutableStateOf<Shot?>(null) }
@@ -495,7 +506,32 @@ private fun AppShellContent(
                 },
             )
             Spacer(Modifier.height(16.dp))
-            if (shatterOpen) {
+            val memory = todayMemory
+            if (memory != null && !shatterOpen && !recallOpen && !memoriesOpen &&
+                Tab.entries[selected] == Tab.Inbox
+            ) {
+                app.shotlist.ui.memories.MemoryCard(
+                    memory = memory,
+                    hazeState = hazeState,
+                    onOpen = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        memoriesOpen = true
+                    },
+                    onDismiss = {
+                        app.shotlist.engine.memories.MemoryEngine
+                            .dismiss(context, memory.shot.id)
+                        todayMemory = null
+                    },
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+            if (memoriesOpen) {
+                Box(Modifier.weight(1f)) {
+                    app.shotlist.ui.memories.MemoriesFeed(
+                        onClose = { memoriesOpen = false },
+                    )
+                }
+            } else if (shatterOpen) {
                 ShatterScreen(
                     hazeState = hazeState,
                     onClose = { shatterOpen = false },

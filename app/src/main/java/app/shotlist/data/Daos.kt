@@ -89,6 +89,17 @@ interface ShotDao {
         deleteShotsById(shotIds)
     }
 
+    /** Time Machine: processed shots taken inside a window, newest first. */
+    @Query(
+        "SELECT * FROM shots WHERE status = 'PROCESSED' " +
+            "AND takenAt BETWEEN :from AND :until ORDER BY takenAt DESC LIMIT 10"
+    )
+    suspend fun processedBetween(from: Long, until: Long): List<Shot>
+
+    /** Memories feed: every shot that ever produced something, newest first. */
+    @Query("SELECT * FROM shots WHERE status = 'PROCESSED' ORDER BY takenAt DESC LIMIT 200")
+    fun processedTimeline(): kotlinx.coroutines.flow.Flow<List<Shot>>
+
     /** After a suggestion purge, shots with nothing left re-enter the pipeline. */
     @Query("DELETE FROM shots WHERE id NOT IN (SELECT shotId FROM findings)")
     suspend fun purgeOrphans()
@@ -131,6 +142,10 @@ interface FindingDao {
     /** Engine upgraded: stored suggestions were made by an older, dumber brain. */
     @Query("DELETE FROM findings WHERE state = 'SUGGESTED'")
     suspend fun purgeSuggested()
+
+    /** Everything a single shot produced (Time Machine, detail surfaces). */
+    @Query("SELECT * FROM findings WHERE shotId = :shotId ORDER BY confidence DESC")
+    suspend fun forShot(shotId: Long): List<Finding>
 
     // --- Morning digest (additive, t78) ---
 
