@@ -1,6 +1,6 @@
 # Shotlist Google Play readiness
 
-Last code audit: 2026-09-01 (`cf3c5f2`)
+Last code audit: 2026-09-01 (`f9c9a97`)
 
 Last policy check: 2026-09-01
 
@@ -14,21 +14,22 @@ true.
 | Area | What exists on current main | Store consequence |
 | --- | --- | --- |
 | Screenshot Inbox | Broad-library backfill, live observer, 15-minute WorkManager catch-up, share-sheet ingest, Photo Picker import, local OCR/classification, detail-first actions | Keep screenshot understanding as the first and dominant listing promise if requesting broad photo access. Do not promise immediate closed-app detection. |
-| Recall | Local full-text screenshot search; Free UI shows the latest 30 days and a planned-Pro preview for older matches | Resolve the non-purchasable Pro state before release. |
+| Recall | Local full-text screenshot search; billing-off release builds get full history, while debug can preview the 30-day Free limit | Do not market Pro until purchase and restore exist. |
 | Scan | Camera “Anything,” bundled ML Kit barcode/QR handling, and Google Play services document scanning to PDF | Camera permission is now intentional. Docs mode has a Play services/runtime-download dependency and may be unsupported on low-RAM or non-GMS devices. |
 | Track | Local menstrual-flow/cycle estimates plus habits and streaks | This is a health feature. The old “Health apps: no” answer is invalid. |
-| Vault | Device-credential/biometric lock for sensitive findings; Free UI exposes 3 items and previews unlimited Pro | Reviewers need device credentials to exercise the lock; resolve the non-purchasable Pro state. |
+| Vault | Device-credential/biometric lock for sensitive findings; billing-off release builds are unlimited, while debug can preview the 3-item Free limit | Reviewers need device credentials to exercise the lock. |
 | Shatter | User-confirmed MediaStore trash flow for stale screenshots on Android 11+ | Describe it as review-and-trash, never automatic deletion. |
 | Other | Widgets, reminders, weekly/share cards, themes, and living backgrounds | Only market features retained in the release candidate and demonstrated with fabricated data. |
 
 There is no account, advertising SDK, cloud sync, or connected billing implementation.
-The Pro sheet explicitly says purchases are not connected and cannot charge the user.
+`BILLING_LIVE=false` therefore defaults release builds to full access. The honest Pro
+sheet and Free limits are reachable only through the debug tier preview.
 
 ## Release verdict
 
 **Not ready for Play submission.** Current main has a credible broad-photo-access case
 and good local-data controls, but the release still has policy, disclosure, health,
-monetization, and packaging blockers.
+SDK-verification, and packaging blockers.
 
 ### P0 blockers
 
@@ -36,17 +37,20 @@ monetization, and packaging blockers.
 | --- | --- | --- |
 | Broad image permission is not review-ready | The manifest requests `READ_MEDIA_IMAGES`; Play permits this only when persistent/frequent access is indispensable to promoted core functionality and Photo Picker is insufficient. | Submit the declaration and review video below. Keep recurring screenshot-library analysis as the main listing and onboarding purpose. Prepare a picker/share-only release variant if Play rejects the use case. |
 | Prominent disclosure is incomplete | Onboarding says Shotlist scans existing screenshots and that contents stay on-device, but it does not present access scope, storage, and fallback together in one disclosure immediately before the system prompt. “Choose screenshots” is available later in You, not as the onboarding secondary action. | Ship the consolidated disclosure and three choices below, then record the exact production flow. Keep notifications out of this request. |
-| Public and in-app privacy text is stale | The in-app policy omits cycle/period and habit data. `PRIVACY_POLICY_DRAFT.md` still says deletion and backup are future work and does not cover Scan, QR, Docs, vault, health data, or Pro preview limits. No public URL exists. | Reconcile both policies with the exact AAB, add health-data handling and Play-services document scanning, replace all publication placeholders, publish a stable public non-PDF page, and link the same policy in Play Console and the app. |
+| Public and in-app privacy text is stale | The in-app policy omits cycle/period and habit data. `PRIVACY_POLICY_DRAFT.md` still says deletion and backup are future work and does not cover Scan, QR, Docs, vault, or health data. No public URL exists. | Reconcile both policies with the exact AAB, add health-data handling and Play-services document scanning, replace all publication placeholders, publish a stable public non-PDF page, and link the same policy in Play Console and the app. |
 | Period tracking changes the policy classification | Track stores menstrual-flow days and estimates cycle timing. Google lists period tracking as a Health apps declaration feature; current main has no health disclaimer. | Declare **Period tracking**, explain that estimates are local and informational, and add the required non-medical-device/no-diagnosis disclaimer to the store description. Verify whether any intended audience or regional obligations require more. |
 | ML Kit and Play services Data Safety need release proof | Bundled text recognition and barcode scanning use ML Kit. Docs uses `play-services-mlkit-document-scanner`, whose models, logic, and UI are dynamically delivered and run through Google Play services. Removing `INTERNET` from Shotlist's process does not prove that a Google process transfers no operational data. | Inspect the exact merged release manifest and SDK Index, test release traffic/IPC on a GMS device, and reconcile findings with Google's current ML Kit disclosure. Use the conservative Data Safety answer until verified. |
 | Notification permission is requested too broadly | `requestPrimaryAction` asks for `POST_NOTIFICATIONS` before the first action of any kind, including code, place, link, contact, product, recipe, and noise actions. | Ask only when accepting an event/deadline that schedules a reminder or when the user explicitly enables reminders, with nearby benefit copy. |
-| Production monetization state is incomplete | Release builds start in Free, limit Recall to 30 days and the vault UI to 3 items, then open a Pro preview with no purchase path. | Before store submission, either remove the release limits/paywall, or connect compliant Play Billing and complete pricing, purchase, restore, cancellation, and entitlement testing. Do not ship an unreachable upgrade as a finished product. |
 
 ### P1 submission gates
 
 - Produce and test a signed, minified Android App Bundle. CI currently builds and
   distributes only a debug APK. Protect the upload key and enroll in Play App Signing.
 - Confirm `app.shotlist` is the permanent package name before the first upload.
+- Keep `BILLING_LIVE=false` while billing is absent so release users retain full access.
+  Before ever flipping it, connect compliant Play Billing and test pricing, purchase,
+  restore, cancellation, offline startup, and entitlement recovery; the `true` branch
+  deliberately starts release users in Free until billing proves Pro.
 - Versioning is now automated: CI uses `GITHUB_RUN_NUMBER` for `versionCode` and
   `0.1.<run>` for `versionName`, with local fallback code `1`. Confirm the intended
   public version name and that every uploaded AAB's code remains monotonically higher.
@@ -81,6 +85,8 @@ monetization, and packaging blockers.
   provide minimum-scope paths. Multi-select copies are serialized and collision-safe.
 - An in-app privacy policy, `Delete all my data`, biometric vault lock, and
   screenshot-specific upload wording ship.
+- Billing-off release builds default to full access, avoiding a dead-end Pro gate;
+  debug builds can still preview both entitlement tiers.
 - `WAKE_LOCK` is retained for WorkManager's bounded OCR jobs; confirm its final merged
   purpose before submission.
 
@@ -207,8 +213,8 @@ both. If Play rejects the declaration, ship the picker/share-only build without
 ## Store listing
 
 The draft below reflects current main. Remove any feature cut from the release AAB. Do
-not mention Pro until a real purchase/restore path exists; if the Free limits remain,
-the listing and in-app product presentation must explain them honestly.
+not mention Pro until a real purchase/restore path exists; the current billing-off
+release exposes full Recall and vault access.
 
 ### Metadata
 
@@ -363,7 +369,8 @@ Asset checklist:
 
 ## Submission sequence
 
-1. Freeze the release feature set and resolve the unreachable Pro experience.
+1. Freeze the release feature set and keep billing-off full access unless a complete,
+   tested Play Billing implementation replaces it.
 2. Fix the prominent photo disclosure and notification request context.
 3. Reconcile and publish the privacy policy, including health and Play services data.
 4. Complete the Period tracking Health apps declaration and add the non-medical
