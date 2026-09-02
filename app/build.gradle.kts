@@ -5,6 +5,12 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val buildNumber = providers.environmentVariable("GITHUB_RUN_NUMBER")
+    .orNull
+    ?.toIntOrNull()
+    ?.takeIf { it in 1..2_100_000_000 }
+    ?: 1
+
 android {
     namespace = "app.shotlist"
     compileSdk = 36
@@ -13,8 +19,8 @@ android {
         applicationId = "app.shotlist"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
         vectorDrawables.useSupportLibrary = true
     }
 
