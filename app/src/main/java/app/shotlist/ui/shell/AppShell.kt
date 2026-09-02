@@ -240,7 +240,7 @@ private fun AppShellContent(
             if (isDebugBuild) {
                 Entitlement.fromStored(prefs.getString(Entitlement.DEBUG_PREF_KEY, null))
             } else {
-                Entitlement.FREE
+                Entitlement.releaseDefault()
             },
         )
     }
@@ -657,7 +657,11 @@ private fun AppShellContent(
                                 context.getSharedPreferences("shotlist_engine", Context.MODE_PRIVATE)
                                     .edit().clear().apply()
                                 prefs.edit().clear().apply()
-                                entitlement = Entitlement.FREE
+                                entitlement = if (isDebugBuild) {
+                                    Entitlement.FREE
+                                } else {
+                                    Entitlement.releaseDefault()
+                                }
                                 proPreviewReason = null
                                 onboardingComplete = false
                             }

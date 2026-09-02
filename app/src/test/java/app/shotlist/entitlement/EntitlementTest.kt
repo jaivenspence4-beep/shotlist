@@ -1,8 +1,8 @@
 package app.shotlist.entitlement
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class EntitlementTest {
@@ -33,5 +33,17 @@ class EntitlementTest {
         assertEquals(Entitlement.FREE, Entitlement.fromStored("FREE"))
         assertEquals(Entitlement.FREE, Entitlement.fromStored("unknown"))
         assertEquals(Entitlement.FREE, Entitlement.fromStored(null))
+    }
+
+    @Test
+    fun `release stays unlocked until billing is live`() {
+        assertFalse(BILLING_LIVE)
+        assertEquals(Entitlement.PRO, Entitlement.releaseDefault())
+        assertEquals(Entitlement.PRO, Entitlement.releaseDefault(billingLive = false))
+    }
+
+    @Test
+    fun `release fails closed to free when billing goes live`() {
+        assertEquals(Entitlement.FREE, Entitlement.releaseDefault(billingLive = true))
     }
 }
