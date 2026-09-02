@@ -66,6 +66,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,7 +142,7 @@ fun ScanScreen(
     val allFindings by db.findings().byTypes(findingTypes).collectAsState(initial = emptyList())
     var cameraGranted by remember { mutableStateOf(hasCameraPermission(context)) }
     var phase by remember { mutableStateOf(CapturePhase.Ready) }
-    var selectedMode by remember { mutableStateOf(ScanMode.ANYTHING) }
+    var selectedMode by rememberSaveable { mutableStateOf(ScanMode.ANYTHING) }
     var captureMode by remember { mutableStateOf(ScanMode.ANYTHING) }
     var captureMediaId by remember { mutableStateOf<Long?>(null) }
     var resultShot by remember { mutableStateOf<Shot?>(null) }

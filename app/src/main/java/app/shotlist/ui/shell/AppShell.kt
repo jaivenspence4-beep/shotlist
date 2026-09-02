@@ -84,6 +84,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -249,6 +250,9 @@ private fun AppShellContent(
         entitlement.vaultItemLimit?.let { vaultedFindings.take(it) } ?: vaultedFindings
     }
     val shotCount by db.shots().count().collectAsState(initial = 0)
+    // Recall temporarily replaces the tab subtree; keep each tab's saveable UI state
+    // so returning does not feel like relaunching that tab.
+    val tabStateHolder = rememberSaveableStateHolder()
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var recallOpen by rememberSaveable { mutableStateOf(false) }
     var shatterOpen by rememberSaveable { mutableStateOf(false) }
@@ -514,12 +518,13 @@ private fun AppShellContent(
                 )
             } else {
                 AnimatedContent(
-                targetState = Tab.entries[selected],
-                transitionSpec = { fadeIn() + scaleIn(initialScale = 0.98f) togetherWith fadeOut() + scaleOut(targetScale = 0.98f) },
-                label = "tab-content",
-                modifier = Modifier.weight(1f),
+                    targetState = Tab.entries[selected],
+                    transitionSpec = { fadeIn() + scaleIn(initialScale = 0.98f) togetherWith fadeOut() + scaleOut(targetScale = 0.98f) },
+                    label = "tab-content",
+                    modifier = Modifier.weight(1f),
                 ) { tab ->
-                    when (tab) {
+                    tabStateHolder.SaveableStateProvider(tab.name) {
+                        when (tab) {
                     Tab.Inbox -> InboxScreen(
                         actions = actions,
                         focusFindingId = deepLinkFindingId,
@@ -667,6 +672,7 @@ private fun AppShellContent(
                             }
                         },
                     )
+                        }
                     }
                 }
             }
