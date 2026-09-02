@@ -148,8 +148,13 @@ interface FindingDao {
     )
     suspend fun duplicates(type: String, title: String, payload: String, whenAt: Long?): Int
 
-    /** Engine upgraded: stored suggestions were made by an older, dumber brain. */
-    @Query("DELETE FROM findings WHERE state = 'SUGGESTED'")
+    /**
+     * Engine upgraded: stored suggestions were made by an older, dumber brain.
+     * Quick notes are human-authored, never classifier output, and their
+     * synthetic shot has no MediaStore row to rescan from — so they must
+     * survive every VERSION bump (which also keeps purgeOrphans off them).
+     */
+    @Query("DELETE FROM findings WHERE state = 'SUGGESTED' AND type != 'NOTE'")
     suspend fun purgeSuggested()
 
     /** Everything a single shot produced (Time Machine, detail surfaces). */
