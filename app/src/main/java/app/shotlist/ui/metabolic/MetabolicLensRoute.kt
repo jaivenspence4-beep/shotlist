@@ -305,7 +305,6 @@ fun MetabolicLensRoute(
     if (showMomentSheet) {
         AddMomentSheet(
             hazeState = hazeState,
-            now = clockNow,
             onSave = { kind, occurredAt, note ->
                 scope.launch {
                     dao.insertMoment(
@@ -379,7 +378,7 @@ private fun RouteHeader(
         }
         Column(Modifier.weight(1f)) {
             Text("METABOLIC LENS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-            Text("Glucose story from earlier today", fontWeight = FontWeight.Black, fontSize = 22.sp)
+            Text("Your private glucose story", fontWeight = FontWeight.Black, fontSize = 22.sp)
         }
         if (checking) {
             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -412,7 +411,7 @@ private fun SetupExplainerPanel(
         Text("See the shape of your day", fontWeight = FontWeight.Black, fontSize = 25.sp)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Lingo sends five-minute sensor-glucose readings through Health Connect about three hours later. Shotlist reads them only when you open this screen and keeps its copy on this phone.",
+            "Lingo sends five-minute sensor-glucose readings through Health Connect about three hours later. Shotlist reads them only when you open this screen and stores its copy on this phone unless you choose to export it.",
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(10.dp))
@@ -800,7 +799,6 @@ private fun SourceChooserSheet(
 @Composable
 private fun AddMomentSheet(
     hazeState: HazeState,
-    now: Long,
     onSave: (kind: String, occurredAt: Long, note: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -855,7 +853,8 @@ private fun AddMomentSheet(
             Spacer(Modifier.height(14.dp))
             Button(
                 onClick = {
-                    onSave(kind, now - offsetHours * 60L * 60 * 1000, note.trim())
+                    val occurredAt = System.currentTimeMillis() - offsetHours * 60L * 60 * 1000
+                    onSave(kind, occurredAt, note.trim())
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -948,7 +947,7 @@ private fun DisconnectDialog(
                 Text("Keep local history")
             }
             OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
-                Text("Delete local glucose data")
+                Text("Delete local history and moments")
             }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                 Text("Cancel")
