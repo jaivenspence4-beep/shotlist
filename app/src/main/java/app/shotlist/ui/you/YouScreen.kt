@@ -1,5 +1,6 @@
 package app.shotlist.ui.you
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -56,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.shotlist.data.Finding
+import app.shotlist.data.ShotlistExport
 import app.shotlist.engine.IngestWorker
 import app.shotlist.entitlement.Entitlement
 import app.shotlist.ui.glass.GlassPanel
@@ -75,6 +79,7 @@ import app.shotlist.ui.privacy.PrivacyPolicyScreen
 import app.shotlist.ui.theme.LivingScene
 import app.shotlist.ui.theme.ShotlistPalette
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.launch
 
 @Composable
 fun YouScreen(
@@ -105,10 +110,14 @@ fun YouScreen(
     onDeleteAllData: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current.applicationContext
+    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var showPrivateExportDialog by remember { mutableStateOf(false) }
+    var exportInProgress by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     var lastImportCount by remember { mutableStateOf<Int?>(null) }
     val screenshotPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 50),
@@ -119,6 +128,25 @@ fun YouScreen(
         }
     }
     val hiddenVaultCount = (vaultTotalCount - vaultedFindings.size).coerceAtLeast(0)
+
+    fun startExport() {
+        if (exportInProgress) return
+        scope.launch {
+            exportInProgress = true
+            exportError = null
+            try {
+                runCatching {
+                    val send = ShotlistExport.shareIntent(context)
+                    context.startActivity(Intent.createChooser(send, "Share Shotlist data"))
+                }
+                    .onFailure { error ->
+                        exportError = error.message ?: "Export failed"
+                    }
+            } finally {
+                exportInProgress = false
+            }
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -525,6 +553,30 @@ fun YouScreen(
                     color = Color.White.copy(alpha = 0.08f),
                 )
                 ActionRow(
+                    icon = Icons.Outlined.FileDownload,
+                    title = "Export my data",
+                    detail = when {
+                        exportInProgress -> "Building ZIP…"
+                        exportError != null -> exportError.orEmpty()
+                        vaultTotalCount > 0 && !vaultUnlocked -> "Unlock vault first · private values are included"
+                        else -> "JSON + image references · no screenshot pixels"
+                    },
+                    accent = MaterialTheme.colorScheme.secondary,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        when {
+                            exportInProgress -> Unit
+                            vaultTotalCount > 0 && !vaultUnlocked -> onOpenVault()
+                            vaultTotalCount > 0 -> showPrivateExportDialog = true
+                            else -> startExport()
+                        }
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                )
+                ActionRow(
                     icon = Icons.Outlined.AutoAwesome,
                     title = "Replay the welcome",
                     detail = "See the three-tap setup again",
@@ -565,7 +617,10 @@ fun YouScreen(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         showDeleteDialog = false
-                        onDeleteAllData()
+                        scope.launch {
+                            ShotlistExport.clearCached(context)
+                            onDeleteAllData()
+                        }
                     },
                 ) {
                     Text("Delete Shotlist data")
@@ -574,6 +629,35 @@ fun YouScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Keep it")
+                }
+            },
+        )
+    }
+
+    if (showPrivateExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivateExportDialog = false },
+            icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
+            title = { Text("Include private vault values?") },
+            text = {
+                Text(
+                    "This ZIP includes vaulted codes, Wi-Fi details, and any other private payloads. Only share it somewhere you trust. Screenshot pixels are not included.",
+                )
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showPrivateExportDialog = false
+                        startExport()
+                    },
+                ) {
+                    Text("Include and export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPrivateExportDialog = false }) {
+                    Text("Cancel")
                 }
             },
         )
