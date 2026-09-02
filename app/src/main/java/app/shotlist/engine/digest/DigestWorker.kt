@@ -51,13 +51,14 @@ class DigestWorker(
         val dueToday = db.findings().dueBetween(now, endOfDay)
         val expiringSoon = db.findings().deadlinesBetween(endOfDay + 1, in48h)
 
-        if (dueToday.isEmpty() && expiringSoon.isEmpty()) return Result.success()
-
-        // Time Machine line joins an already-firing digest; a memory alone
-        // never pings (trust law: no hollow notifications).
+        // Contract (t68/t70): a memory IS content — Google-Photos-style
+        // memory-only mornings fire gently. Only a truly empty day is silent.
         val memoryLine = runCatching {
             app.shotlist.engine.memories.MemoryEngine.todayMemory(ctx)
         }.getOrNull()?.let { "${it.agoLabel}: ${it.findings.firstOrNull()?.title ?: "a moment you kept"}" }
+        if (dueToday.isEmpty() && expiringSoon.isEmpty() && memoryLine == null) {
+            return Result.success()
+        }
         notify(ctx, dueToday, expiringSoon, memoryLine)
         return Result.success()
     }
@@ -87,7 +88,8 @@ class DigestWorker(
             due.isNotEmpty() && expiring.isNotEmpty() ->
                 "${due.size} today · ${expiring.size} expiring soon"
             due.isNotEmpty() -> if (due.size == 1) "1 thing today" else "${due.size} things today"
-            else -> "${expiring.size} expiring soon"
+            expiring.isNotEmpty() -> "${expiring.size} expiring soon"
+            else -> "A memory from your screenshots"
         }
 
         val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
