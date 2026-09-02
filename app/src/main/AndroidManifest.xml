@@ -17,6 +17,10 @@
     <!-- WAKE_LOCK: WorkManager holds brief locks while OCR jobs run -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Optional Metabolic Lens: foreground, read-only Health Connect access.
+         Never add write, background-read, or history permissions. -->
+    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+
     <!-- Scan module: in-app camera capture feeds the same local OCR pipeline -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature
@@ -34,6 +38,12 @@
     <uses-permission
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
+
+    <!-- Android 13 and lower discover the separately installed provider through
+         this package query. It grants no network or data access. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <!-- Backup off: OCR-derived text, codes, and screenshot copies must not
          leave the device via platform backup either. -->
@@ -63,6 +73,30 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!-- Health Connect owns these entry points. This exported surface is
+             intentionally isolated: static copy, no extras, and FLAG_SECURE. -->
+        <activity
+            android:name=".health.android.HealthConnectRationaleActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="Health Connect privacy"
+            android:theme="@style/Theme.Shotlist">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".health.android.ViewHealthPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".health.android.HealthConnectRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <receiver
             android:name=".actions.ShotlistReminderReceiver"

@@ -1,0 +1,5 @@
+[versions]
+healthConnect = "1.1.0"
+
+[libraries]
+androidx-health-connect-client = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }

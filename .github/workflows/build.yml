@@ -32,6 +32,20 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Verify APK cannot use the network
+        run: |
+          merged_manifest="$(find app/build/intermediates -type f -name AndroidManifest.xml -path '*merged*manifest*debug*' -print -quit)"
+          if [ -z "$merged_manifest" ]; then
+            echo "Debug merged manifest was not found"
+            exit 1
+          fi
+          if grep -Eq 'android\.permission\.(INTERNET|ACCESS_NETWORK_STATE)' "$merged_manifest"; then
+            echo "Forbidden network permission found in $merged_manifest"
+            grep -E 'android\.permission\.(INTERNET|ACCESS_NETWORK_STATE)' "$merged_manifest"
+            exit 1
+          fi
+          echo "Verified merged manifest has no network permissions"
+
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk shotlist-${{ github.run_number }}.apk
 
