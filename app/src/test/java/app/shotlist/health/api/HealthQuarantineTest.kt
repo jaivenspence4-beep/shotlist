@@ -83,13 +83,16 @@ class HealthQuarantineTest {
 
     @Test
     fun `health copy never says blood glucose or promises live data`() {
-        val banned = Regex("(?i)blood glucose|real[- ]time|live glucose|alert|dosing|diagnos")
+        val banned = Regex("(?i)blood glucose|real[- ]time|live glucose|\\balerts?\\b|dosing|diagnos")
+        val stringLiteral = Regex("\"(?:[^\"\\\\]|\\\\.)*\"")
         val offenders = kotlinFiles()
-            .filter { relative(it).startsWith("ui/metabolic/") }
+            .filter { relative(it).startsWith("ui/metabolic/") || relative(it).startsWith("health/") }
             .flatMap { file ->
-                file.readLines()
-                    .filter { line -> line.contains('"') && banned.containsMatchIn(line) }
-                    .map { "${relative(file)}: ${it.trim()}" }
+                stringLiteral.findAll(file.readText())
+                    .map { it.value }
+                    .filter { banned.containsMatchIn(it) }
+                    .map { "${relative(file)}: $it" }
+                    .toList()
             }
         assertEquals("Forbidden health copy", emptyList<String>(), offenders)
     }
